@@ -166,6 +166,9 @@ const app = {
             case 'login':
                 this.renderLogin();
                 break;
+            case 'register':
+                this.renderRegister();
+                break;
             case 'my-bookings':
                 this.renderMyBookings();
                 break;
@@ -192,8 +195,20 @@ const app = {
             this.showNotification(`Bienvenido, ${user.name}`);
 
             if (user.role === 'admin') this.navigate('admin');
-            else if (this.selectedService) this.navigate('booking'); // Return to booking if started
-            else this.navigate('home');
+            else {
+                const pendingService = localStorage.getItem('lumina_pending_service');
+                if (pendingService) {
+                    localStorage.removeItem('lumina_pending_service');
+                    this.navigate('booking', pendingService); // Note: booking view doesn't take params directly but startBooking does. 
+                    // Better approach:
+                    this.selectedService = pendingService;
+                    this.navigate('booking');
+                } else if (this.selectedService) {
+                    this.navigate('booking');
+                } else {
+                    this.navigate('home');
+                }
+            }
         } else {
             alert('Credenciales incorrectas');
         }
@@ -284,6 +299,7 @@ const app = {
         this.selectedService = serviceId;
         if (!state.currentUser) {
             this.showNotification('Por favor inicia sesión para reservar');
+            localStorage.setItem('lumina_pending_service', this.selectedService || '');
             this.navigate('login');
         } else {
             this.navigate('booking');
@@ -410,6 +426,7 @@ const app = {
         main.innerHTML = `
             <div class="detail-header">
                 <div class="container text-center">
+                    <button onclick="app.navigate('services')" class="btn-secondary" style="background:transparent; border-color:white; color: white; margin-bottom: 2rem;">← Volver</button>
                     <h1 style="font-size: 3rem; margin-bottom: 1rem;">${service.name}</h1>
                     <p style="font-size: 1.25rem; opacity: 0.9;">${service.intro || service.description}</p>
                 </div>
@@ -628,7 +645,7 @@ const app = {
         const availableProfs = state.professionals.filter(p => p.serviceIds.includes(parseInt(serviceId)));
 
         profSelect.innerHTML += availableProfs.map(p =>
-            `< option value = "${p.id}" > ${p.name} (${p.specialty})</option > `
+            `<option value="${p.id}">${p.name} (${p.specialty})</option>`
         ).join('');
 
         // Reset slots
@@ -1258,36 +1275,97 @@ const app = {
     renderLogin() {
         const main = document.getElementById('main-content');
         main.innerHTML = `
-    < section class="section" >
-        <div class="container">
-            <div class="login-container">
-                <div class="login-header">
-                    <h2>Iniciar Sesión</h2>
-                    <p>Accede a tu cuenta para gestionar tus turnos</p>
+            <section class="section">
+                <div class="container">
+                    <div class="login-container">
+                        <div class="login-header">
+                            <h2>Iniciar Sesión</h2>
+                            <p>Accede a tu cuenta para gestionar tus turnos</p>
+                        </div>
+                        <form onsubmit="event.preventDefault(); app.login(this.email.value, this.password.value)">
+                            <div class="form-group">
+                                <label class="form-label text-left">Email</label>
+                                <input type="email" name="email" class="form-input" required placeholder="tu@email.com">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label text-left">Contraseña</label>
+                                <input type="password" name="password" class="form-input" required>
+                            </div>
+                            <button type="submit" class="btn-primary" style="width: 100%">Ingresar</button>
+                            <div class="text-center" style="margin-top: 1rem;">
+                                <a href="#" onclick="event.preventDefault(); app.forgotPassword()" style="color: var(--primary); font-size: 0.9rem;">¿Olvidaste tu contraseña?</a>
+                            </div>
+                        </form>
+                        <div class="auth-btn-group">
+                            <button onclick="app.login('admin@julielle.com', 'admin')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Admin</button>
+                            <button onclick="app.login('paciente@test.com', '123')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Paciente</button>
+                            <button onclick="app.login('profesional@julielle.com', 'prof')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Prof</button>
+                        </div>
+                         <div style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
+                            <p>¿No tienes cuenta?</p>
+                            <button onclick="app.navigate('register')" class="btn-secondary" style="margin-top: 0.5rem; width: 100%;">Crear cuenta</button>
+                        </div>
+                    </div>
                 </div>
-                <form onsubmit="event.preventDefault(); app.login(this.email.value, this.password.value)">
-                    <div class="form-group">
-                        <label class="form-label" style="text-align: left;">Email</label>
-                        <input type="email" name="email" class="form-input" required placeholder="tu@email.com">
+            </section>
+        `;
+    },
+
+    renderRegister() {
+        const main = document.getElementById('main-content');
+        main.innerHTML = `
+            <section class="section">
+                <div class="container">
+                    <div class="login-container">
+                        <div class="login-header">
+                            <h2>Crear Cuenta</h2>
+                            <p>Regístrate para reservar tus turnos</p>
+                        </div>
+                        <form onsubmit="event.preventDefault(); app.register(this)">
+                            <div class="form-group">
+                                <label class="form-label text-left">Nombre Completo</label>
+                                <input type="text" name="name" class="form-input" required placeholder="Tu nombre">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label text-left">Email</label>
+                                <input type="email" name="email" class="form-input" required placeholder="tu@email.com">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label text-left">Contraseña</label>
+                                <input type="password" name="password" class="form-input" required>
+                            </div>
+                            <button type="submit" class="btn-primary" style="width: 100%">Registrarse</button>
+                        </form>
+                        <div style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
+                            <p>¿Ya tienes cuenta?</p>
+                            <button onclick="app.navigate('login')" class="btn-secondary" style="margin-top: 0.5rem; width: 100%;">Iniciar Sesión</button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" style="text-align: left;">Contraseña</label>
-                        <input type="password" name="password" class="form-input" required>
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Ingresar</button>
-                    <div class="text-center" style="margin-top: 1rem;">
-                        <a href="#" onclick="event.preventDefault(); app.forgotPassword()" style="color: var(--primary); font-size: 0.9rem;">¿Olvidaste tu contraseña?</a>
-                    </div>
-                </form>
-                <div class="auth-btn-group">
-                    <button onclick="app.login('admin@julielle.com', 'admin')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Admin</button>
-                    <button onclick="app.login('paciente@test.com', '123')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Paciente</button>
-                    <button onclick="app.login('profesional@julielle.com', 'prof')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Prof</button>
                 </div>
-            </div>
-        </div>
-            </section >
-    `;
+            </section>
+        `;
+    },
+
+    register(form) {
+        const name = form.name.value;
+        const email = form.email.value;
+        const password = form.password.value;
+
+        if (state.users.find(u => u.email === email)) {
+            alert('El email ya está registrado');
+            return;
+        }
+
+        const newUser = {
+            email,
+            password,
+            name,
+            role: 'patient'
+        };
+
+        state.users.push(newUser);
+        this.showNotification('Cuenta creada con éxito. Iniciando sesión...');
+        this.login(email, password);
     },
 
     renderMyBookings() {
