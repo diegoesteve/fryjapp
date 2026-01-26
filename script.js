@@ -12,6 +12,8 @@ const state = {
             icon: "sparkles",
             description: "Tratamiento revitalizante para una piel radiante.",
             intro: "Ideal para purificar tu piel y devolverle su luminosidad natural.",
+            longDescription: "Nuestro tratamiento de Limpieza Facial Profunda combina técnicas manuales y aparatología de última generación para liberar tu piel de impurezas, células muertas y toxinas. Incluye doble limpieza, exfoliación enzimática, extracciones meticulosas y una mascarilla calmante personalizada. Finalizamos con un masaje facial drenante que estimula la microcirculación, dejando tu rostro fresco, oxigenado y receptivo a los nutrientes.",
+            products: ["Gel Limpiador pH Balanceado", "Peeling Enzimático de Papaya", "Alta Frecuencia", "Mascarilla de Arcilla Verde y Aloe", "Sérum Hialurónico"],
             benefits: ["Elimina impurezas profundas", "Piel más suave y luminosa", "Reduce poros dilatados", "Estimula la renovación celular"]
         },
         {
@@ -24,6 +26,8 @@ const state = {
             icon: "sun",
             description: "Alivia el estrés y relaja tus músculos.",
             intro: "Desconecta del mundo y regálate un momento de paz absoluta.",
+            longDescription: "Experimenta una relajación total con nuestro Masaje Relajante. Utilizamos aceites esenciales aromáticos y técnicas de masaje sueco y descontracturante suave para liberar la tensión acumulada en espalda, cuello y hombros. El ambiente está cuidadosamente preparado con aromaterapia y música suave para inducir un estado de calma profunda, reduciendo los niveles de cortisol y mejorando tu bienestar general.",
+            products: ["Aceite de Almendras Dulces", "Esencia de Lavanda y Bergamota", "Piedras Basálticas Tibias (opcional)"],
             benefits: ["Reduce el estrés y la ansiedad", "Alivia dolores musculares", "Mejora la circulación", "Mejora la calidad del sueño"]
         },
         {
@@ -36,6 +40,8 @@ const state = {
             icon: "gem",
             description: "Tecnología avanzada para rejuvenecer tu piel.",
             intro: "Combate los signos del envejecimiento con nuestra tecnología de punta.",
+            longDescription: "Nuestro Tratamiento Anti-Edad es un protocolo intensivo diseñado para combatir visiblemente los signos del envejecimiento. Combinamos radiofrecuencia tripolar para estimular la producción de colágeno con la aplicación de péptidos bioactivos. El resultado es un efecto lifting inmediato, redefinición del óvalo facial y una notable disminución en la profundidad de las líneas de expresión. Ideal para pieles maduras o como tratamiento preventivo.",
+            products: ["Gel Conductor con Ácido Hialurónico", "Radiofrecuencia Tripolar", "Ampollas de Retinol y Vitamina C", "Mascarilla Tensora de Oro"],
             benefits: ["Reduce líneas de expresión", "Mejora la firmeza de la piel", "Hidratación profunda", "Efecto lifting inmediato"]
         },
         {
@@ -48,7 +54,63 @@ const state = {
             icon: "heart",
             description: "Cuidado completo para manos y pies.",
             intro: "Mima tus manos y pies con nuestro tratamiento spa integral.",
+            longDescription: "Más que una manicura, una experiencia de spa. Comenzamos con una inmersión en sales minerales relajantes, seguida de un cuidado detallado de uñas y cutículas. Continuamos con una exfoliación de azúcar y aceites naturales para suavizar la piel, y un masaje hidratante profundo con manteca de karité. Finalizamos con el esmaltado de tu elección, garantizando un acabado perfecto y duradero.",
+            products: ["Sales Minerales del Mar Muerto", "Exfoliante de Azúcar y Almendras", "Manteca de Karité Orgánica", "Esmaltes 5-Free de Larga Duración"],
             benefits: ["Uñas perfectamente cuidadas", "Exfoliación e hidratación profunda", "Masaje relajante en manos y pies", "Esmaltado de larga duración"]
+        },
+        {
+            id: 5,
+            name: "Drenaje Linfático",
+            category: "Corporal",
+            duration: 50,
+            price: 45,
+            priceRange: "$40 - $50",
+            icon: "droplets",
+            description: "Masaje suave para mejorar la circulación.",
+            intro: "Elimina toxinas y reduce la retención de líquidos.",
+            longDescription: "El Drenaje Linfático Manual es una técnica terapéutica que utiliza movimientos suaves, lentos y rítmicos para estimular el sistema linfático. Es ideal para combatir la retención de líquidos, reducir edemas y eliminar toxinas del organismo. Además de sus beneficios estéticos, fortalece el sistema inmunológico y proporciona una sensación de ligereza y descanso inmediato en piernas y cuerpo.",
+            products: ["Emulsión Drenante con Castaño de Indias", "Aceite de Ciprés y Romero"],
+            benefits: ["Mejora la circulación", "Reduce la hinchazón", "Elimina toxinas", "Relajación profunda"]
+        },
+        {
+            id: 6,
+            name: "Peeling Químico",
+            category: "Facial",
+            duration: 40,
+            price: 70,
+            priceRange: "$60 - $80",
+            icon: "sparkles",
+            description: "Renovación celular profunda.",
+            intro: "Piel nueva, suave y libre de manchas.",
+            longDescription: "Transforma la textura de tu piel con nuestro Peeling Químico controlado. Utilizamos una mezcla personalizada de ácidos (glicólico, láctico o salicílico) según tu tipo de piel para exfoliar profundamente, eliminar manchas solares y marcas de acné. Este tratamiento acelera la regeneración celular, revelando una piel nueva, más suave, uniforme y luminosa desde la primera sesión.",
+            products: ["Solución de Ácido Glicólico/Salicílico", "Neutralizante Calmante", "Pantalla Solar FPS 50+", "Crema Regeneradora Post-Peeling"],
+            benefits: ["Elimina manchas", "Suaviza arrugas finas", "Unifica el tono", "Piel más luminosa"]
+        },
+        {
+            id: 7,
+            name: "Maderoterapia",
+            category: "Corporal",
+            duration: 60,
+            price: 50,
+            priceRange: "$45 - $60",
+            icon: "tree-deciduous",
+            description: "Técnica milenaria para tonificar.",
+            intro: "Remodela tu figura con instrumentos de madera.",
+            longDescription: "La Maderoterapia es una técnica holística y estética que utiliza instrumentos de madera anatómicamente diseñados para masajear y remodelar el cuerpo. Ayuda a romper los depósitos de grasa localizada, combatir la celulitis (“piel de naranja”) y tonificar los músculos. Es un tratamiento vigoroso y efectivo que además mejora la circulación y alivia tensiones musculares profundas.",
+            products: ["Aceite Anticelulítico de Café y Hiedra", "Kit de Maderas (Rodillos, Copa Sueca, Tabla)"],
+            benefits: ["Tonifica el cuerpo", "Reduce celulitis", "Mejora la circulación", "Reafirma la piel"]
+        },
+        {
+            id: 8,
+            name: "Lifting de Pestañas",
+            category: "Facial",
+            duration: 45,
+            price: 35,
+            priceRange: "$30 - $45",
+            icon: "eye",
+            description: "Realza tu mirada naturalmente.",
+            intro: "Pestañas más largas y curvadas por semanas.",
+            benefits: ["Mirada más abierta", "Efecto natural", "Duración prolongada", "Sin mantenimiento diario"]
         }
     ],
     professionals: [
@@ -86,6 +148,7 @@ const state = {
         const dateB = new Date(b.date + 'T' + b.time);
         return dateA - dateB;
     }),
+    bookingFor: null, // To store client email when professional books for patient
     currentView: 'home',
     currentUser: JSON.parse(localStorage.getItem('lumina_user')) || null,
     users: [
@@ -98,7 +161,9 @@ const state = {
     rescheduleId: null,
     patients: JSON.parse(localStorage.getItem('lumina_patients')) || [],
     visits: JSON.parse(localStorage.getItem('lumina_visits')) || [],
-    adminFilters: { professionalId: '', status: '', month: '' }
+    adminFilters: { professionalId: '', status: '', month: '' },
+    reportFilters: { startDate: '', endDate: '', professionalId: '' },
+    agendaView: { mode: 'list', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: null }
 };
 
 // App Logic
@@ -196,11 +261,17 @@ const app = {
 
             if (user.role === 'admin') this.navigate('admin');
             else {
+                const pendingAction = localStorage.getItem('lumina_pending_action');
                 const pendingService = localStorage.getItem('lumina_pending_service');
-                if (pendingService) {
+
+                if (pendingAction) {
+                    const action = JSON.parse(pendingAction);
+                    localStorage.removeItem('lumina_pending_action');
+                    this.selectedService = action.serviceId;
+                    this.selectedProfessional = action.professionalId;
+                    this.navigate('booking');
+                } else if (pendingService) {
                     localStorage.removeItem('lumina_pending_service');
-                    this.navigate('booking', pendingService); // Note: booking view doesn't take params directly but startBooking does. 
-                    // Better approach:
                     this.selectedService = pendingService;
                     this.navigate('booking');
                 } else if (this.selectedService) {
@@ -295,11 +366,20 @@ const app = {
         nav.innerHTML = navHtml;
     },
 
-    startBooking(serviceId = null) {
+    startBooking(serviceId = null, professionalId = null, bookingForEmail = null) {
         this.selectedService = serviceId;
+        this.selectedProfessional = professionalId;
+        state.bookingFor = bookingForEmail; // Set context if booking for someone else
+
         if (!state.currentUser) {
             this.showNotification('Por favor inicia sesión para reservar');
+            // Save context
+            const action = { serviceId, professionalId };
+            localStorage.setItem('lumina_pending_action', JSON.stringify(action));
+
+            // Legacy/Backup
             localStorage.setItem('lumina_pending_service', this.selectedService || '');
+
             this.navigate('login');
         } else {
             this.navigate('booking');
@@ -363,23 +443,36 @@ const app = {
                     <div class="services-grid" id="featured-services">
                         <!-- Services injected here -->
                     </div>
+                    
+                    <!-- ENH-01: Load More Button -->
+                    <div class="text-center" style="margin-top: 2rem;" id="load-more-container">
+                         <button onclick="app.loadMoreServices()" class="btn-secondary" style="border-style: dashed;">+ Cargar más tratamientos</button>
+                    </div>
+
+                    <div class="text-center" style="margin-top: 2rem;">
+                         <button onclick="app.navigate('services')" class="btn-primary">Ver todo el catálogo completo</button>
+                    </div>
                 </div>
             </section>
         `;
 
-        // Inject top 3 services
+        // Inject initial services (First 4)
+        this.renderFeaturedServices(4);
+    },
+
+    renderFeaturedServices(limit) {
         const grid = document.getElementById('featured-services');
-        state.services.slice(0, 3).forEach(service => {
+        grid.innerHTML = ''; // Clear current
+        state.services.slice(0, limit).forEach(service => {
             grid.innerHTML += this.createServiceCard(service);
         });
+        this.updateIcons();
+    },
 
-        // ENH-14: View All Button
-        const container = document.querySelector('.section .container');
-        container.insertAdjacentHTML('beforeend', `
-            <div class="text-center" style="margin-top: 2rem;">
-                 <button onclick="app.navigate('services')" class="btn-secondary">Ver todo el menú</button>
-            </div>
-        `);
+    loadMoreServices() {
+        // ENH-01: Load all services (or next batch)
+        this.renderFeaturedServices(state.services.length); // Show all
+        document.getElementById('load-more-container').style.display = 'none'; // Hide button
     },
 
     renderServices(category = 'Todas') {
@@ -433,32 +526,57 @@ const app = {
             </div>
             
             <section class="container" style="padding: 0 1.5rem 4rem;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
-                    <div>
-                        <h2 style="margin-bottom: 1.5rem;">Beneficios Clave</h2>
+                <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 4rem; margin-top: -3rem; position: relative; z-index: 2;">
+                    <!-- Left Column: Details -->
+                    <div style="background: white; padding: 2.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);">
+                        <h2 style="margin-bottom: 1.5rem; color: var(--primary-dark);">Sobre el Tratamiento</h2>
+                        <p style="color: #444; line-height: 1.7; margin-bottom: 2rem; font-size: 1.05rem;">
+                            ${service.longDescription || service.description}
+                        </p>
+
+                         ${service.products ? `
+                        <div style="margin-bottom: 2.5rem;">
+                            <h3 style="font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; font-weight: 600;">Productos y Tecnología</h3>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                                ${service.products.map(p => `
+                                    <span style="background: #f0f9ff; color: #0369a1; padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; border: 1px solid #e0f2fe;">${p}</span>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <h3 style="font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; font-weight: 600;">Beneficios Clave</h3>
                         <ul class="benefit-list">
                             ${(service.benefits || []).map(b => `<li>${b}</li>`).join('')}
                         </ul>
-                        <div style="background: #f8f8f8; padding: 1.5rem; border-radius: var(--radius-lg); margin-top: 2rem;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                                <span>Duración:</span>
-                                <strong>${service.duration} mins</strong>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 1.5rem;">
-                                <span>Precio Estimado:</span>
-                                <strong>${service.priceRange || '$' + service.price}</strong>
-                            </div>
-                            <button onclick="app.startBooking(${service.id})" class="btn-primary" style="width: 100%; text-align: center;">Reservar Ahora</button>
-                        </div>
                     </div>
+
+                    <!-- Right Column: Card -->
                     <div>
-                         <div style="background: #eee; height: 400px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center;">
-                            <i data-lucide="${service.icon}" size="96" style="color: #ccc"></i>
-                         </div>
+                         <div style="background: white; padding: 2rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); position: sticky; top: 2rem;">
+                             <div style="background: #f8f8f8; height: 250px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem;">
+                                <i data-lucide="${service.icon}" size="80" style="color: #ccc"></i>
+                             </div>
+                            
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #eee;">
+                                <span style="color: #666;">Duración</span>
+                                <strong style="color: var(--primary-dark);">${service.duration} mins</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2rem;">
+                                <span style="color: #666;">Precio Estimado</span>
+                                <strong style="font-size: 1.25rem; color: var(--primary-dark);">${service.priceRange || '$' + service.price}</strong>
+                            </div>
+                            
+                            <button onclick="app.startBooking(${service.id})" class="btn-primary" style="width: 100%; text-align: center; justify-content: center; padding: 1rem;">
+                                Reservar Turno
+                            </button>
+                            <p style="text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #888;">Reserva fácil y segura</p>
+                        </div>
                     </div>
                 </div>
             </section>
         `;
+        this.updateIcons();
     },
 
     renderProfessionals() {
@@ -520,7 +638,7 @@ const app = {
                                 Con años de experiencia brindando tratamientos personalizados para realzar tu belleza natural.
                             </p>
 
-                            <h3 class="mb-4">Especialidades</h3>
+                            <h3 class="mb-4">Tipos de turnos</h3>
                             <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem;">
                                 ${p.serviceIds.map(sid => {
                 const s = state.services.find(ser => ser.id === sid);
@@ -529,7 +647,7 @@ const app = {
                             </div>
 
                             <div class="text-center">
-                                <button onclick="app.startBooking(null)" class="btn-primary" style="padding: 1rem 3rem;">Solicitar Turno con ${p.name.split(' ')[0]}</button>
+                                <button onclick="app.startBooking(null, ${p.id})" class="btn-primary" style="padding: 1rem 3rem;">Solicitar Turno con ${p.name.split(' ')[0]}</button>
                             </div>
                         </div>
                     </div>
@@ -631,6 +749,17 @@ const app = {
         }
 
         this.filterProfessionals();
+
+        // Pre-select professional if set
+        if (this.selectedProfessional) {
+            const profSelect = document.getElementById('professional-select');
+            // Check if the professional is in the options (it might not be if service doesn't match, but logic should handle it)
+            if (profSelect.querySelector(`option[value="${this.selectedProfessional}"]`)) {
+                profSelect.value = this.selectedProfessional;
+            }
+            // Clear it after using so it doesn't persist improperly across navigations if not intended
+            this.selectedProfessional = null;
+        }
     },
 
     filterProfessionals() {
@@ -753,20 +882,32 @@ const app = {
             return;
         }
 
-        const booking = {
+        const service = state.services.find(s => s.id == formData.get('service'));
+        const professional = state.professionals.find(p => p.id == formData.get('professional'));
+        const date = formData.get('date');
+        const time = formData.get('time');
+
+        const newBooking = {
             id: Date.now(),
-            serviceId: formData.get('service'),
-            serviceName: state.services.find(s => s.id == formData.get('service')).name,
-            professionalId: formData.get('professional'),
-            professionalName: state.professionals.find(p => p.id == formData.get('professional')).name,
-            date: formData.get('date'),
-            time: formData.get('time'),
-            clientName: formData.get('name'),
-            clientEmail: formData.get('email'),
-            status: 'Confirmado'
+            serviceId: service.id,
+            serviceName: service.name,
+            professionalId: professional.id,
+            professionalName: professional.name,
+            date: date,
+            time: time,
+            clientName: state.bookingFor ? state.users.find(u => u.email === state.bookingFor).name : state.currentUser.name,
+            clientEmail: state.bookingFor || state.currentUser.email,
+            clientPhone: document.getElementById('phone')?.value || '',
+            status: 'Pendiente',
+            notes: document.getElementById('notes')?.value || ''
         };
 
-        state.bookings.push(booking);
+        state.bookings.push(newBooking);
+        localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
+
+        // Clear proxy context
+        state.bookingFor = null;
+
         // Sort bookings by date/time
         state.bookings.sort((a, b) => {
             const dateA = new Date(a.date + 'T' + a.time);
@@ -880,8 +1021,11 @@ const app = {
                         <p>${user.role === 'professional' ? 'Pacientes atendidos por ti' : 'Listado maestro de pacientes'}</p>
                     </div>
                     
-                    <div class="mb-4">
-                        <input type="text" placeholder="Buscar por nombre, email o teléfono..." class="form-input" style="max-width: 400px; margin: 0 auto; display: block;" onkeyup="app.filterPatients(this.value)">
+                    <div class="mb-4" style="display: flex; gap: 1rem; max-width: 600px; margin: 0 auto 1.5rem;">
+                        <input type="text" placeholder="Buscar por nombre, email o teléfono..." class="form-input" style="flex: 1;" onkeyup="app.filterPatients(this.value)">
+                        ${user.role === 'professional' || user.role === 'admin' ?
+                `<button onclick="app.showCreatePatientModal()" class="btn-primary" style="white-space: nowrap;">+ Nuevo Paciente</button>`
+                : ''}
                     </div>
 
                     <div style="overflow-x: auto;">
@@ -949,6 +1093,72 @@ const app = {
         `).join('');
     },
 
+    showCreatePatientModal() {
+        this.openModal(`
+            <div style="text-align: left;">
+                <h3 style="margin-bottom: 1.5rem;">Registrar Nuevo Paciente</h3>
+                <form onsubmit="app.createPatient(event, this)">
+                    <div class="form-group">
+                        <label class="form-label">Nombre Completo</label>
+                        <input type="text" name="name" class="form-input" required placeholder="Juan Pérez">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-input" required placeholder="juan@ejemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Teléfono</label>
+                        <input type="tel" name="phone" class="form-input" required placeholder="11 1234 5678">
+                    </div>
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button type="button" onclick="app.closeModal()" class="btn-secondary" style="margin-right: 0.5rem;">Cancelar</button>
+                        <button type="submit" class="btn-primary">Crear Paciente</button>
+                    </div>
+                </form>
+            </div>
+        `);
+    },
+
+    createPatient(e, form) {
+        e.preventDefault();
+        const name = form.name.value;
+        const email = form.email.value;
+        const phone = form.phone.value;
+
+        if (state.users.find(u => u.email === email)) {
+            alert('Este email ya está registrado en el sistema.');
+            return;
+        }
+
+        // 1. Create User
+        const newUser = {
+            email,
+            password: '123', // Default placeholder
+            name,
+            role: 'patient'
+        };
+        state.users.push(newUser);
+        // Persist users if we were using LS for them, but usually syncing happens via patients/visits. 
+        // For this demo, we'll assume state.users is enough or updated via app flow.
+        // Actually, let's sync users to LS for consistency in this demo app
+        // localStorage.setItem('lumina_users', JSON.stringify(state.users)); // Not strictly used by app.init but good for completeness
+
+        // 2. Create Patient Record
+        const newPatient = {
+            name,
+            email,
+            phone,
+            lastVisit: '-',
+            totalVisits: 0
+        };
+        state.patients.push(newPatient);
+        localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
+
+        this.closeModal();
+        this.showNotification('Paciente creado correctamente');
+        this.renderPatients(); // Refresh list
+    },
+
     renderPatientProfile(email) {
         const p = state.patients.find(pt => pt.email === email);
         if (!p) return this.navigate('patients');
@@ -967,7 +1177,13 @@ const app = {
         main.innerHTML = `
             <section class="section">
                 <div class="container">
-                    <button onclick="app.navigate('patients')" class="btn-secondary" style="margin-bottom: 2rem;">← Volver al Listado</button>
+                <div class="container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                        <button onclick="app.navigate('patients')" class="btn-secondary">← Volver al Listado</button>
+                        ${(user.role === 'professional' || user.role === 'admin') ?
+                `<button onclick="app.startBooking(null, null, '${p.email}')" class="btn-primary">Agendar Turno</button>`
+                : ''}
+                    </div>
                     
                     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem;">
                         <!-- Profile Card -->
@@ -1017,6 +1233,43 @@ const app = {
                                     </div>
                                 </div>
                              `).join('') : '<p>No hay historial disponible.</p>'}
+
+                             <!-- Visit History (Financial) -->
+                             <h3 style="margin: 2rem 0 1rem;">Historial de Visitas (Detalle)</h3>
+                             ${(() => {
+                const bookingIds = new Set(pBookings.map(b => b.id));
+                const pVisits = state.visits.filter(v => bookingIds.has(v.bookingId));
+
+                if (!pVisits.length) return '<p style="color: #666;">No hay visitas registradas.</p>';
+
+                return `
+                                    <div style="overflow-x: auto;">
+                                        <table class="admin-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Fecha</th>
+                                                    <th>Tratamiento</th>
+                                                    <th>Profesional</th>
+                                                    <th>Monto</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${pVisits.sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
+                    const prof = state.professionals.find(p => p.id === parseInt(v.professionalId));
+                    return `
+                                                        <tr>
+                                                            <td>${v.date}</td>
+                                                            <td>${v.treatment || 'Servicio'}</td>
+                                                            <td>${prof ? prof.name : 'Desconocido'}</td>
+                                                            <td style="font-weight: bold;">$${v.price}</td>
+                                                        </tr>
+                                                     `;
+                }).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                `;
+            })()}
                         </div>
                     </div>
                 </div>
@@ -1108,16 +1361,32 @@ const app = {
     },
 
     // ENH-25: Reports
+    // ENH-25: Reports
     renderReports() {
         // Only Admin
         if (state.currentUser.role !== 'admin') return;
 
         const main = document.getElementById('main-content');
 
+        // Filter Logic
+        const { startDate, endDate, professionalId } = state.reportFilters;
+
+        let filteredVisits = state.visits;
+
+        if (startDate) {
+            filteredVisits = filteredVisits.filter(v => v.date >= startDate);
+        }
+        if (endDate) {
+            filteredVisits = filteredVisits.filter(v => v.date <= endDate);
+        }
+        if (professionalId) {
+            filteredVisits = filteredVisits.filter(v => v.professionalId == professionalId);
+        }
+
         // Calculate Totals by Professional
         const reportData = {};
 
-        state.visits.forEach(v => {
+        filteredVisits.forEach(v => {
             if (!reportData[v.professionalId]) {
                 reportData[v.professionalId] = {
                     name: state.professionals.find(p => p.id === parseInt(v.professionalId))?.name || 'Desconocido',
@@ -1143,6 +1412,28 @@ const app = {
                     
                     <button onclick="app.navigate('admin')" class="btn-secondary" style="margin-bottom: 2rem;">← Volver a Reservas</button>
 
+                     <!-- Filters -->
+                    <div class="filters-bar" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label" style="font-size: 0.85rem;">Desde</label>
+                            <input type="date" class="form-input" value="${startDate}" onchange="state.reportFilters.startDate = this.value; app.renderReports()">
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label" style="font-size: 0.85rem;">Hasta</label>
+                            <input type="date" class="form-input" value="${endDate}" onchange="state.reportFilters.endDate = this.value; app.renderReports()">
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label" style="font-size: 0.85rem;">Profesional</label>
+                            <select class="form-select" onchange="state.reportFilters.professionalId = this.value; app.renderReports()">
+                                <option value="">Todos</option>
+                                ${state.professionals.map(p => `<option value="${p.id}" ${p.id == professionalId ? 'selected' : ''}>${p.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <button onclick="state.reportFilters = { startDate: '', endDate: '', professionalId: '' }; app.renderReports()" class="btn-secondary" style="height: 42px;">
+                            Limpiar Filtros
+                        </button>
+                    </div>
+
                     <div style="overflow-x: auto;">
                         <table class="admin-table">
                             <thead>
@@ -1164,7 +1455,42 @@ const app = {
                                         <td style="color: var(--primary-dark); font-weight: bold;">$${row.total}</td>
                                     </tr>
                                 `).join('')}
-                                ${Object.keys(reportData).length === 0 ? '<tr><td colspan="5" class="text-center">No hay visitas registradas aún.</td></tr>' : ''}
+                                ${Object.keys(reportData).length === 0 ? '<tr><td colspan="5" class="text-center">No hay visitas que coincidan con los filtros.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-header" style="margin-top: 3rem;">
+                        <h3>Detalle de Movimientos</h3>
+                        <p>Desglose de visitas realizadas</p>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Paciente</th>
+                                    <th>Profesional</th>
+                                    <th>Tratamiento</th>
+                                    <th>Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredVisits.sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
+            const booking = state.bookings.find(b => b.id === v.bookingId);
+            const prof = state.professionals.find(p => p.id === parseInt(v.professionalId));
+            return `
+                                    <tr>
+                                        <td>${v.date}</td>
+                                        <td>${booking ? booking.clientName : 'Cliente Externo'}</td>
+                                        <td>${prof ? prof.name : 'Desconocido'}</td>
+                                        <td>${v.treatment || 'Servicio'}</td>
+                                        <td style="font-weight: bold;">$${v.price}</td>
+                                    </tr>
+                                    `;
+        }).join('')}
+                                ${filteredVisits.length === 0 ? '<tr><td colspan="5" class="text-center">No hay movimientos.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
@@ -1302,8 +1628,8 @@ const app = {
                             <button onclick="app.login('profesional@julielle.com', 'prof')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Prof</button>
                         </div>
                          <div style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
-                            <p>¿No tienes cuenta?</p>
-                            <button onclick="app.navigate('register')" class="btn-secondary" style="margin-top: 0.5rem; width: 100%;">Crear cuenta</button>
+                            <p>¿Nunca te registraste?</p>
+                            <button onclick="app.navigate('register')" class="btn-secondary" style="margin-top: 0.5rem; width: 100%;">Creá tu usuario</button>
                         </div>
                     </div>
                 </div>
