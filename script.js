@@ -21,7 +21,8 @@
         adminFilters: { professionalId: '', status: '', month: '' },
         reportFilters: { startDate: '', endDate: '', professionalId: '' },
         agendaView: { mode: 'list', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: null },
-        visibleServicesCount: 4
+        visibleServicesCount: 4,
+        isLoading: false
     };
 
     // App Logic
@@ -190,6 +191,9 @@
                 case 'patient-profile':
                     this.renderPatientProfile(params);
                     break;
+                case 'services-management': // New case for service management
+                    this.renderServicesManagement();
+                    break;
                 default:
                     this.renderHome();
             }
@@ -257,12 +261,14 @@
                         phone: "Sin registrar",
                         firstVisit: b.date,
                         lastVisit: b.date,
-                        totalVisits: 1
+                        totalVisits: 1,
+                        assignedProfessionalIds: [] // ENH-Assignment: Track specific professionals
                     });
                 } else {
                     const p = patientMap.get(b.clientEmail);
                     if (b.date > p.lastVisit) p.lastVisit = b.date;
                     if (b.date < p.firstVisit) p.firstVisit = b.date;
+                    if (!p.assignedProfessionalIds) p.assignedProfessionalIds = []; // Ensure array exists
                     // Recalculate total visits is tricky if we don't reset. 
                     // Simple approach: Recalculate count from scratch?
                 }
@@ -402,10 +408,8 @@
                         <!-- Services injected here -->
                     </div>
                     
-                    <!-- ENH-01: Load More Button -->
-                    <div class="text-center" style="margin-top: 2rem;" id="load-more-container">
-                         <button onclick="turnoApp.loadMoreServices()" class="btn-secondary">+ Cargar más tratamientos</button>
-                    </div>
+                    <!-- ENH-01: Infinite Scroll Loader Container (auto-injected) -->
+
 
                     <div class="text-center" style="margin-top: 2rem;">
                          <button onclick="turnoApp.navigate('services')" class="btn-secondary">Ver todo el catálogo completo</button>
@@ -425,20 +429,58 @@
                 grid.innerHTML += this.createServiceCard(service);
             });
 
-            // Button visibility logic
-            const btnContainer = document.getElementById('load-more-container');
+            // Button visibility logic - Infinite Scroll Sentinel
+            // Ensure sentinel exists
+            let sentinel = document.getElementById('sentinel');
+            if (!sentinel) {
+                sentinel = document.createElement('div');
+                sentinel.id = 'sentinel';
+                sentinel.className = 'loader-container';
+                sentinel.innerHTML = '<div class="loader"></div>';
+                grid.parentElement.appendChild(sentinel);
+            }
+
+            // Hide loader if all loaded
             if (limit >= state.services.length) {
-                btnContainer.style.display = 'none';
+                sentinel.style.display = 'none';
             } else {
-                btnContainer.style.display = 'block';
+                sentinel.style.display = 'flex';
+                // Re-observe if needed
+                if (this.observer) this.observer.observe(sentinel);
+            }
+
+            // Setup Observer if not exists
+            if (!this.observer) {
+                const options = {
+                    root: null,
+                    rootMargin: '100px',
+                    threshold: 0.1
+                };
+
+                this.observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting && !state.isLoading && state.visibleServicesCount < state.services.length) {
+                            turnoApp.loadMoreServices();
+                        }
+                    });
+                }, options);
+
+                this.observer.observe(sentinel);
             }
 
             this.updateIcons();
         },
 
         loadMoreServices() {
-            state.visibleServicesCount += 4;
-            this.renderFeaturedServices(state.visibleServicesCount);
+            if (state.isLoading) return;
+            state.isLoading = true;
+
+            // Simulate network delay for UX
+            setTimeout(() => {
+                state.visibleServicesCount += 4;
+                this.renderFeaturedServices(state.visibleServicesCount);
+                state.isLoading = false;
+            }, 800);
         },
 
         renderServices(category = 'Todas') {
@@ -643,6 +685,70 @@
                 </div>
             </div>
         `;
+        },
+
+        // ENH-Assignment: Helper for display
+        getPatientProfessionalsDisplay(patient) {
+            if (!patient.assignedProfessionalIds || patient.assignedProfessionalIds.length === 0) {
+                return '<span style="color: #999; font-style: italic; font-size: 0.9rem;">Ninguno</span>';
+            }
+            const names = patient.assignedProfessionalIds
+                .map(id => state.professionals.find(prof => prof.id === parseInt(id))?.name)
+                .filter(Boolean);
+
+            return names.join(', ');
+        },
+
+        openAssignProfessionalModal(email) {
+            const patient = state.patients.find(p => p.email === email);
+            if (!patient) return;
+
+            const existingIds = new Set(patient.assignedProfessionalIds || []);
+
+            const content = `
+                <div class="modal-header">
+                    <h3 style="margin-bottom: 0.5rem;">Asignar Profesionales</h3>
+                    <p style="color: #666; margin-bottom: 1.5rem;">Paciente: <strong>${patient.name}</strong></p>
+                </div>
+                
+                <form onsubmit="event.preventDefault(); turnoApp.savePatientAssignment('${email}')" id="assign-form">
+                    <div style="max-height: 300px; overflow-y: auto; margin-bottom: 1.5rem; border: 1px solid #eee; border-radius: 8px; padding: 1rem;">
+                        ${state.professionals.map(p => `
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #f9f9f9;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; flex: 1;">
+                                    <input type="checkbox" name="professional_id" value="${p.id}" ${existingIds.has(p.id) || existingIds.has(String(p.id)) ? 'checked' : ''} style="width: 18px; height: 18px;">
+                                    <span>${p.name}</span>
+                                </label>
+                                <span style="font-size: 0.8rem; color: #999;">${p.specialty}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div style="display: flex; gap: 1rem;">
+                         <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary" style="flex: 1;">Cancelar</button>
+                        <button type="submit" class="btn-primary" style="flex: 1;">Guardar Asignaciones</button>
+                    </div>
+                </form>
+            `;
+
+            this.openModal(content);
+        },
+
+        savePatientAssignment(email) {
+            const form = document.getElementById('assign-form');
+            if (!form) return;
+
+            const checkboxes = form.querySelectorAll('input[name="professional_id"]:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+            const patientIndex = state.patients.findIndex(p => p.email === email);
+            if (patientIndex !== -1) {
+                state.patients[patientIndex].assignedProfessionalIds = selectedIds;
+                localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
+                this.renderPatients(); // Re-render list
+                this.showNotification('Asignaciones actualizadas correctamente');
+            }
+            this.closeModal();
         },
 
         renderBooking() {
@@ -1032,6 +1138,7 @@
                                     <th>Teléfono</th>
                                     <th>Última Visita</th>
                                     <th>Total Turnos</th>
+                                    <th>Profesionales</th>
                                     <th>Acción</th>
                                 </tr>
                             </thead>
@@ -1044,10 +1151,16 @@
                                         <td>${p.lastVisit}</td>
                                         <td>${p.totalVisits}</td>
                                         <td>
+                                            ${this.getPatientProfessionalsDisplay(p)}
+                                            ${user.role === 'admin' ?
+                            `<button onclick="turnoApp.openAssignProfessionalModal('${p.email}')" style="background:none; border:none; cursor:pointer;" title="Asignar Profesional">✏️</button>`
+                            : ''}
+                                        </td>
+                                        <td>
                                             <button onclick="turnoApp.navigate('patient-profile', '${p.email}')" style="background: var(--primary); color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Ver Perfil</button>
                                         </td>
                                     </tr>
-                                `).join('') : '<tr><td colspan="6" class="text-center">No se encontraron pacientes.</td></tr>'}
+                                `).join('') : '<tr><td colspan="7" class="text-center">No se encontraron pacientes.</td></tr>'}
                             </tbody>
                         </table>
                     </div>
@@ -1057,6 +1170,219 @@
 
             // Store for filtering
             this.currentPatientList = visiblePatients;
+        },
+
+        // ENH-Services: Service Management
+        renderServicesManagement() {
+            const main = document.getElementById('main-content');
+            const services = state.services;
+
+            main.innerHTML = `
+    <section class="section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Gestión de Servicios</h2>
+                <p>Configura los servicios ofrecidos y profesionales asignados</p>
+            </div>
+            
+            <div class="mb-4" style="display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto 1.5rem;">
+                <button onclick="turnoApp.navigate('admin')" class="btn-secondary">← Volver al Panel</button>
+                <button onclick="turnoApp.openServiceModal()" class="btn-primary">+ Nuevo Servicio</button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Duración</th>
+                            <th>Precio</th>
+                            <th>Estado</th>
+                            <th>Profesionales</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${services.map(s => {
+                // Find professionals who have this service ID
+                const assignedProfs = state.professionals.filter(p => p.serviceIds.includes(s.id));
+                const profNames = assignedProfs.map(p => p.name).join(', ') || '<span style="color:#999;font-style:italic">Ninguno</span>';
+
+                return `
+                            <tr style="${!s.active ? 'opacity: 0.6; background: #f9f9f9;' : ''}">
+                                <td><strong>${s.name}</strong></td>
+                                <td>${s.category}</td>
+                                <td>${s.duration} min</td>
+                                <td>$${s.price}</td>
+                                <td>
+                                    <span class="status-badge ${s.active ? 'completado' : 'cancelado'}">
+                                        ${s.active ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                </td>
+                                <td>${profNames}</td>
+                                <td>
+                                    <button onclick="turnoApp.openServiceModal(${s.id})" style="background:none; border:none; cursor:pointer; font-size:1.1rem; margin-right:0.5rem;" title="Editar">✏️</button>
+                                    <button onclick="turnoApp.deleteService(${s.id})" style="background:none; border:none; cursor:pointer; font-size:1.1rem; color: #dc3545;" title="${s.active ? 'Desactivar' : 'Reactivar'}">${s.active ? '🗑️' : '♻️'}</button>
+                                </td>
+                            </tr>
+                        `}).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    `;
+        },
+
+        openServiceModal(serviceId = null) {
+            const service = serviceId ? state.services.find(s => s.id === serviceId) : null;
+            const title = service ? 'Editar Servicio' : 'Nuevo Servicio';
+
+            // Determine assigned professionals for this service
+            const assignedProfIds = new Set();
+            if (serviceId) {
+                state.professionals.forEach(p => {
+                    if (p.serviceIds.includes(serviceId)) {
+                        assignedProfIds.add(p.id);
+                    }
+                });
+            }
+
+            const content = `
+        <div class="modal-header">
+            <h3>${title}</h3>
+        </div>
+        <form onsubmit="event.preventDefault(); turnoApp.saveService(${serviceId})" id="service-form" style="display: grid; gap: 1rem;">
+            <div class="form-group">
+                <label class="form-label">Nombre del Servicio</label>
+                <input type="text" name="name" class="form-input" value="${service ? service.name : ''}" required>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Categoría</label>
+                    <select name="category" class="form-select" required>
+                        <option value="Facial" ${service && service.category === 'Facial' ? 'selected' : ''}>Facial</option>
+                        <option value="Corporal" ${service && service.category === 'Corporal' ? 'selected' : ''}>Corporal</option>
+                        <option value="Manos y Pies" ${service && service.category === 'Manos y Pies' ? 'selected' : ''}>Manos y Pies</option>
+                        <option value="Otros" ${service && service.category === 'Otros' ? 'selected' : ''}>Otros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Duración (min)</label>
+                    <input type="number" name="duration" class="form-input" value="${service ? service.duration : '30'}" required min="5" step="5">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Precio ($)</label>
+                    <input type="number" name="price" class="form-input" value="${service ? service.price : ''}" required min="0">
+                </div>
+                 <div class="form-group">
+                    <label class="form-label">Icono (Lucide)</label>
+                    <input type="text" name="icon" class="form-input" value="${service ? service.icon : 'sparkles'}" placeholder="e.g. star, heart">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Descripción Corta</label>
+                <textarea name="description" class="form-input" rows="2">${service ? service.description : ''}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="margin-bottom: 0.5rem; display: block;">Profesionales Asignados</label>
+                <div style="border: 1px solid #eee; border-radius: 8px; padding: 1rem; max-height: 150px; overflow-y: auto;">
+                    ${state.professionals.map(p => `
+                        <label style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" name="assigned_profs" value="${p.id}" ${assignedProfIds.has(p.id) ? 'checked' : ''}>
+                            <span>${p.name} <small style="color:#999">(${p.specialty})</small></span>
+                        </label>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="active" ${!service || service.active ? 'checked' : ''}>
+                    <span>Servicio Activo (visible para reservas)</span>
+                </label>
+            </div>
+
+            <button type="submit" class="btn-primary" style="width: 100%;">Guardar Servicio</button>
+        </form>
+    `;
+
+            this.openModal(content);
+        },
+
+        saveService(serviceId) {
+            const form = document.getElementById('service-form');
+            if (!form) return;
+
+            const formData = new FormData(form);
+            const assignedProfIds = Array.from(form.querySelectorAll('input[name="assigned_profs"]:checked')).map(cb => parseInt(cb.value));
+
+            const serviceData = {
+                name: formData.get('name'),
+                category: formData.get('category'),
+                duration: parseInt(formData.get('duration')),
+                price: parseFloat(formData.get('price')),
+                icon: formData.get('icon'),
+                description: formData.get('description'),
+                active: formData.get('active') === 'on'
+            };
+
+            let newId = serviceId;
+
+            if (serviceId) {
+                // Update existing service
+                const index = state.services.findIndex(s => s.id === serviceId);
+                if (index !== -1) {
+                    state.services[index] = { ...state.services[index], ...serviceData };
+                }
+            } else {
+                // Create new service
+                newId = state.services.length > 0 ? Math.max(...state.services.map(s => s.id)) + 1 : 1;
+                state.services.push({
+                    id: newId,
+                    ...serviceData,
+                    products: [], benefits: [] // Defaults
+                });
+            }
+
+            // Handle Profile Assignments
+            state.professionals.forEach(p => {
+                const shouldHaveService = assignedProfIds.includes(p.id);
+                const hasService = p.serviceIds.includes(newId);
+
+                if (shouldHaveService && !hasService) {
+                    p.serviceIds.push(newId);
+                } else if (!shouldHaveService && hasService) {
+                    p.serviceIds = p.serviceIds.filter(id => id !== newId);
+                }
+            });
+
+            // Persist
+            localStorage.setItem('lumina_services', JSON.stringify(state.services));
+            localStorage.setItem('lumina_professionals', JSON.stringify(state.professionals));
+
+            this.closeModal();
+            this.renderServicesManagement();
+            this.showNotification(serviceId ? 'Servicio actualizado' : 'Servicio creado');
+        },
+
+        deleteService(serviceId) {
+            const service = state.services.find(s => s.id === serviceId);
+            if (!service) return;
+
+            // Soft delete toggle
+            service.active = !service.active;
+
+            localStorage.setItem('lumina_services', JSON.stringify(state.services));
+            this.renderServicesManagement();
+            this.showNotification(service.active ? 'Servicio reactivado' : 'Servicio desactivado');
         },
 
         filterPatients(query) {
@@ -1070,7 +1396,7 @@
             );
 
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No se encontraron pacientes que coincidan.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No se encontraron pacientes que coincidan.</td></tr>';
                 return;
             }
 
@@ -1081,6 +1407,12 @@
                 <td>${p.phone}</td>
                 <td>${p.lastVisit}</td>
                 <td>${p.totalVisits}</td>
+                <td>
+                    ${this.getPatientProfessionalsDisplay(p)}
+                    ${state.currentUser.role === 'admin' ?
+                    `<button onclick="turnoApp.openAssignProfessionalModal('${p.email}')" style="background:none; border:none; cursor:pointer;" title="Asignar Profesional">✏️</button>`
+                    : ''}
+                </td>
                 <td>
                     <button onclick="turnoApp.navigate('patient-profile', '${p.email}')" style="background: var(--primary); color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Ver Perfil</button>
                 </td>
@@ -1373,28 +1705,38 @@
 
         // ENH-25: Reports
         // ENH-25: Reports
+        // ENH-25: Reports
         renderReports() {
-            // Only Admin
-            if (state.currentUser.role !== 'admin') return;
+            const user = state.currentUser;
+            // Allow Admin and Professional
+            if (user.role !== 'admin' && user.role !== 'professional') return;
 
             const main = document.getElementById('main-content');
+            const isAdmin = user.role === 'admin';
 
             // Filter Logic
             const { startDate, endDate, professionalId } = state.reportFilters;
 
             let filteredVisits = state.visits;
 
+            // Security Filter: Professionals only see their own
+            if (!isAdmin) {
+                filteredVisits = filteredVisits.filter(v => parseInt(v.professionalId) === user.id);
+            }
+            // Admin Filter: Can filter by any professional
+            else if (professionalId) {
+                filteredVisits = filteredVisits.filter(v => v.professionalId == professionalId);
+            }
+
+            // Date Filters
             if (startDate) {
                 filteredVisits = filteredVisits.filter(v => v.date >= startDate);
             }
             if (endDate) {
                 filteredVisits = filteredVisits.filter(v => v.date <= endDate);
             }
-            if (professionalId) {
-                filteredVisits = filteredVisits.filter(v => v.professionalId == professionalId);
-            }
 
-            // Calculate Totals by Professional
+            // Calculate Totals by Professional (for Admin Matrix or Personal Total)
             const reportData = {};
 
             filteredVisits.forEach(v => {
@@ -1413,15 +1755,21 @@
                 reportData[v.professionalId].total += amount;
             });
 
+            // For Professionals: Calculate single total
+            const myTotal = isAdmin ? 0 : (reportData[user.id]?.total || 0);
+
             main.innerHTML = `
             <section class="section">
                 <div class="container">
                     <div class="section-header">
-                        <h2>Reporte de Ingresos</h2>
-                        <p>Resumen financiero por profesional</p>
+                        <h2>${isAdmin ? 'Reporte de Ingresos' : 'Mis Ingresos'}</h2>
+                        <p>${isAdmin ? 'Resumen financiero por profesional' : 'Detalle de tus turnos y ganancias'}</p>
                     </div>
                     
-                    <button onclick="turnoApp.navigate('admin')" class="btn-secondary" style="margin-bottom: 2rem;">← Volver a Reservas</button>
+                    ${isAdmin ?
+                    `<button onclick="turnoApp.navigate('admin')" class="btn-secondary" style="margin-bottom: 2rem;">← Volver a Reservas</button>` :
+                    `<button onclick="turnoApp.navigate('home')" class="btn-secondary" style="margin-bottom: 2rem;">← Volver al Inicio</button>`
+                }
 
                      <!-- Filters -->
                     <div class="filters-bar" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
@@ -1433,6 +1781,8 @@
                             <label class="form-label" style="font-size: 0.85rem;">Hasta</label>
                             <input type="date" class="form-input" value="${endDate}" onchange="state.reportFilters.endDate = this.value; turnoApp.renderReports()">
                         </div>
+                        
+                        ${isAdmin ? `
                         <div style="flex: 1; min-width: 200px;">
                             <label class="form-label" style="font-size: 0.85rem;">Profesional</label>
                             <select class="form-select" onchange="state.reportFilters.professionalId = this.value; turnoApp.renderReports()">
@@ -1440,11 +1790,21 @@
                                 ${state.professionals.map(p => `<option value="${p.id}" ${p.id == professionalId ? 'selected' : ''}>${p.name}</option>`).join('')}
                             </select>
                         </div>
+                        ` : ''}
+
                         <button onclick="state.reportFilters = { startDate: '', endDate: '', professionalId: '' }; turnoApp.renderReports()" class="btn-secondary" style="height: 42px;">
                             Limpiar Filtros
                         </button>
                     </div>
 
+                    ${!isAdmin ? `
+                        <div class="card" style="margin-bottom: 2rem; text-align: center; padding: 2rem;">
+                            <h3 style="color: #666; font-size: 1.1rem; margin-bottom: 0.5rem;">Total Acumulado (Período Seleccionado)</h3>
+                            <div style="font-size: 2.5rem; font-weight: bold; color: var(--primary);">$${myTotal}</div>
+                        </div>
+                    ` : ''}
+
+                    ${isAdmin ? `
                     <div style="overflow-x: auto;">
                         <table class="admin-table">
                             <thead>
@@ -1470,9 +1830,17 @@
                             </tbody>
                         </table>
                     </div>
+                    ` : ''}
+
+
+                ${(Object.keys(reportData).length > 0 || !isAdmin) ? `
+                <div style="text-align: center; margin-top: 1rem; color: #666; font-size: 0.9rem;">
+                    ℹ️ Haz clic en una transacción abajo para ver más detalles.
+                </div>
+                ` : ''}
 
                     <div class="section-header" style="margin-top: 3rem;">
-                        <h3>Detalle de Movimientos</h3>
+                        <h3>${isAdmin ? 'Detalle de Movimientos' : 'Detalle de Mis Turnos'}</h3>
                         <p>Desglose de visitas realizadas</p>
                     </div>
 
@@ -1482,25 +1850,25 @@
                                 <tr>
                                     <th>Fecha</th>
                                     <th>Paciente</th>
-                                    <th>Profesional</th>
+                                    ${isAdmin ? '<th>Profesional</th>' : ''}
                                     <th>Tratamiento</th>
                                     <th>Monto</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${filteredVisits.sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
-                const booking = state.bookings.find(b => b.id === v.bookingId);
-                const prof = state.professionals.find(p => p.id === parseInt(v.professionalId));
-                return `
-                                    <tr>
+                    const booking = state.bookings.find(b => b.id === v.bookingId);
+                    const prof = state.professionals.find(p => p.id === parseInt(v.professionalId));
+                    return `
+                                    <tr onclick="turnoApp.showTransactionDetails(${v.id})" style="cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                                         <td>${v.date}</td>
                                         <td>${booking ? booking.clientName : 'Cliente Externo'}</td>
-                                        <td>${prof ? prof.name : 'Desconocido'}</td>
+                                        ${isAdmin ? `<td>${prof ? prof.name : 'Desconocido'}</td>` : ''}
                                         <td>${v.treatment || 'Servicio'}</td>
                                         <td style="font-weight: bold;">$${v.price}</td>
                                     </tr>
                                     `;
-            }).join('')}
+                }).join('')}
                                 ${filteredVisits.length === 0 ? '<tr><td colspan="5" class="text-center">No hay movimientos.</td></tr>' : ''}
                             </tbody>
                         </table>
@@ -1556,6 +1924,7 @@
                              </div>
                              <button onclick="turnoApp.navigate('reports')" class="btn-secondary">Reportes Financieros</button>
                              <button onclick="turnoApp.navigate('patients')" class="btn-secondary">Maestro Pacientes</button>
+                             <button onclick="turnoApp.navigate('services-management')" class="btn-secondary">Gestión Servicios</button>
                         </div>
                     </div>
 
@@ -1645,6 +2014,63 @@
                 </table>
             </div>
         `;
+        },
+
+        // Transaction Details Modal (ENH-28)
+        showTransactionDetails(visitId) {
+            const visit = state.visits.find(v => v.id === visitId);
+            if (!visit) return;
+
+            const prof = state.professionals.find(p => p.id === parseInt(visit.professionalId));
+            const booking = state.bookings.find(b => b.id === visit.bookingId);
+
+            // Notes placeholder - in real app, fetch from DB
+            const notes = visit.notes || (booking ? booking.notes : '') || "Sin notas registradas por el profesional.";
+
+            const content = `
+                <div class="modal-header" style="text-align: center; margin-bottom: 1.5rem;">
+                    <h3 style="color: var(--primary); margin-bottom: 0.5rem;">Detalle de Transacción</h3>
+                    <p style="color: #666; font-size: 0.9rem;">ID: #${visit.id}</p>
+                </div>
+                
+                <div style="display: grid; gap: 1rem;">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+                        <span style="color: #666;">Tratamiento:</span>
+                        <strong style="text-align: right;">${visit.treatment || 'Servicio General'}</strong>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+                        <span style="color: #666;">Profesional:</span>
+                        <strong>${prof ? prof.name : 'Desconocido'}</strong>
+                    </div>
+                    
+                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+                        <span style="color: #666;">Precio Unitario:</span>
+                        <strong>$${visit.price}</strong>
+                    </div>
+                    
+                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+                        <span style="color: #666;">Cantidad:</span>
+                        <strong>1</strong>
+                    </div>
+                    
+                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+                        <span style="color: #666;">Forma de Pago:</span>
+                        <span class="status-badge completado">${visit.paymentMethod || 'No especificado'}</span>
+                    </div>
+                    
+                    <div style="margin-top: 1rem;">
+                        <h4 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--primary);">Notas del Profesional</h4>
+                        <div style="background: #f9f9f9; padding: 1rem; border-radius: 8px; border: 1px solid #eee; font-style: italic; color: #555;">
+                            "${notes}"
+                        </div>
+                    </div>
+
+                    <button onclick="turnoApp.closeModal()" class="btn-primary" style="margin-top: 1.5rem; width: 100%;">Cerrar</button>
+                </div>
+            `;
+
+            this.openModal(content);
         },
 
         getAdminCalendarHTML() {
@@ -1755,14 +2181,14 @@
                                 <a href="#" onclick="event.preventDefault(); turnoApp.forgotPassword()" style="color: var(--primary); font-size: 0.9rem;">¿Olvidaste tu contraseña?</a>
                             </div>
                         </form>
-                        <div class="auth-btn-group">
-                            <button onclick="turnoApp.login('admin@julielle.com', 'admin')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Admin</button>
-                            <button onclick="turnoApp.login('paciente@test.com', '123')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Paciente</button>
-                            <button onclick="turnoApp.login('profesional@julielle.com', 'prof')" style="background:none; border:none; color: #999; cursor: pointer; text-decoration: underline;">Demo Prof</button>
+                        <div style="margin-top: 1.5rem;">
+                            <button onclick="turnoApp.navigate('register')" class="btn-secondary" style="width: 100%;">¿No tenés cuenta? Creá tu usuario</button>
                         </div>
-                         <div style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
-                            <p>¿Nunca te registraste?</p>
-                            <button onclick="turnoApp.navigate('register')" class="btn-secondary" style="margin-top: 0.5rem; width: 100%;">Creá tu usuario</button>
+
+                        <div class="auth-btn-group" style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
+                            <button onclick="turnoApp.login('admin@julielle.com', 'admin')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Admin</button>
+                            <button onclick="turnoApp.login('paciente@test.com', '123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Paciente</button>
+                            <button onclick="turnoApp.login('profesional@julielle.com', 'prof')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
                         </div>
                     </div>
                 </div>

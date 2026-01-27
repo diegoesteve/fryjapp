@@ -96,7 +96,34 @@ INSERT INTO public.services (name, category, duration, price, price_range, icon,
 ('Drenaje Linfático', 'Corporal', 50, 45, '$40 - $50', 'droplets', 'Masaje suave para mejorar la circulación.', 'Elimina toxinas y reduce retención.', 'El Drenaje Linfático Manual es una técnica terapéutica...', ARRAY['Emulsión Drenante'], ARRAY['Mejora circulación', 'Reduce hinchazón']),
 ('Peeling Químico', 'Facial', 40, 70, '$60 - $80', 'sparkles', 'Renovación celular profunda.', 'Piel nueva, suave y libre de manchas.', 'Transforma la textura de tu piel con nuestro Peeling...', ARRAY['Ácido Glicólico'], ARRAY['Elimina manchas', 'Unifica tono']),
 ('Maderoterapia', 'Corporal', 60, 50, '$45 - $60', 'tree-deciduous', 'Técnica milenaria para tonificar.', 'Remodela tu figura con madera.', 'La Maderoterapia ayuda a romper depósitos de grasa...', ARRAY['Aceites', 'Kit Maderas'], ARRAY['Tonifica', 'Reduce celulitis']),
-('Lifting de Pestañas', 'Facial', 45, 35, '$30 - $45', 'eye', 'Realza tu mirada naturalmente.', 'Pestañas más largas y curvadas.', '', ARRAY[]::text[], ARRAY['Mirada abierta', 'Efecto natural']);
+-- 6. RLS Update: Secure Visits
+-- This ensures professionals only see their own visits
+alter table public.visits enable row level security;
+drop policy if exists "Users see own visits" on public.visits;
+
+-- Policy for Patients to see their own history
+create policy "Patients view own visits" on public.visits for select using (auth.uid() = patient_id);
+
+-- Policy for Professionals to see visits linked to them
+-- We join via professionals table to match the Auth ID
+create policy "Professionals view own assigned visits" on public.visits for select using (
+  exists (
+    select 1 from public.professionals p
+    where p.id = cast(visits.professional_id as int) -- Assuming professional_id in visits is stored as ID, cast if text/int mismatch
+    and p.user_id = auth.uid()
+  )
+);
+
+-- Policy for Admins (assuming they have specific role metadata or we just allow all for now if no specific admin role setup in DB level yet)
+-- For this prototype, if profile.role is 'admin', they see all. 
+-- Note: Recursive policies can be tricky. Simplifying for prototype:
+create policy "Admins view all visits" on public.visits for select using (
+  exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  )
+);
+
 
 -- SEED DATA: PROFESSIONALS
 INSERT INTO public.professionals (name, specialty, image_url, service_ids) VALUES
