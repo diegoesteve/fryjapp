@@ -15,7 +15,14 @@
         rel="stylesheet">
 
     <!-- Icons -->
+
+
+
+    <!-- Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- Styles -->
     <link rel="stylesheet" href="styles.css">
@@ -27,16 +34,16 @@
         <!-- Navigation -->
         <nav class="navbar">
             <div class="container nav-container">
-                <a href="#" class="logo" onclick="app.navigate('home')">JuliEsteve<span>.</span></a>
+                <a href="#" class="logo" onclick="turnoApp.navigate('home')">JuliEsteve<span>.</span></a>
                 <div class="nav-links">
-                    <button onclick="app.navigate('home')" class="nav-btn">Inicio</button>
-                    <button onclick="app.navigate('services')" class="nav-btn">Servicios</button>
-                    <button onclick="app.navigate('professionals')" class="nav-btn">Profesionales</button>
+                    <button onclick="turnoApp.navigate('home')" class="nav-btn">Inicio</button>
+                    <button onclick="turnoApp.navigate('services')" class="nav-btn">Servicios</button>
+                    <button onclick="turnoApp.navigate('professionals')" class="nav-btn">Profesionales</button>
                     <!-- Admin link hidden or subtle -->
-                    <button onclick="app.navigate('admin')" class="nav-btn secondary">Admin</button>
-                    <button onclick="app.startBooking()" class="btn-primary">Reservar Turno</button>
+                    <button onclick="turnoApp.navigate('admin')" class="nav-btn secondary">Admin</button>
+                    <button onclick="turnoApp.startBooking()" class="btn-primary">Reservar Turno</button>
                 </div>
-                <button class="mobile-menu-btn" onclick="app.toggleMenu()">
+                <button class="mobile-menu-btn" onclick="turnoApp.toggleMenu()">
                     <i data-lucide="menu"></i>
                 </button>
             </div>
