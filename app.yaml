@@ -1,0 +1,17 @@
+runtime: python39
+service: default
+
+handlers:
+  # Serve the index page
+  - url: /
+    static_files: dist/index.html
+    upload: dist/index.html
+
+  # Serve assets folder
+  - url: /assets
+    static_dir: dist/assets
+
+  # Serve any other file in dist
+  - url: /(.*)
+    static_files: dist/\1
+    upload: dist/(.*)
