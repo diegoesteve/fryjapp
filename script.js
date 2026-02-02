@@ -2191,7 +2191,7 @@
                             <button onclick="turnoApp.login('profesional@julielle.com', 'prof123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
                         </div>
                         <div style="text-align: center; margin-top: 1rem;">
-                             <button onclick="turnoApp.setupDemoUsers()" style="background:none; border:none; color: #d9534f; cursor: pointer; font-size: 0.75rem; text-decoration: underline;">🛠️ Restaurar Usuarios Demo (Si fallan)</button>
+                             <button onclick="turnoApp.setupDemoUsers()" class="btn-secondary" style="font-size: 0.8rem; padding: 0.5rem 1rem; color: #d9534f; border-color: #d9534f;">🛠️ Restaurar Usuarios Demo</button>
                         </div>
                     </div>
                 </div>
