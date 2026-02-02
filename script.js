@@ -2186,9 +2186,12 @@
                         </div>
 
                         <div class="auth-btn-group" style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
-                            <button onclick="turnoApp.login('admin@julielle.com', 'admin')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Admin</button>
-                            <button onclick="turnoApp.login('paciente@test.com', '123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Paciente</button>
-                            <button onclick="turnoApp.login('profesional@julielle.com', 'prof')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
+                            <button onclick="turnoApp.login('admin@julielle.com', 'admin123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Admin</button>
+                            <button onclick="turnoApp.login('paciente@test.com', 'user123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Paciente</button>
+                            <button onclick="turnoApp.login('profesional@julielle.com', 'prof123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
+                        </div>
+                        <div style="text-align: center; margin-top: 1rem;">
+                             <button onclick="turnoApp.setupDemoUsers()" style="background:none; border:none; color: #d9534f; cursor: pointer; font-size: 0.75rem; text-decoration: underline;">🛠️ Restaurar Usuarios Demo (Si fallan)</button>
                         </div>
                     </div>
                 </div>
@@ -2264,6 +2267,80 @@
                 // Auto login usually happens on SignUp if confirm not required, checking session inside login not needed if we trust signUp session
                 // But let's call our standardize login flow to set state
                 await this.login(email, password);
+            }
+        },
+
+        async setupDemoUsers() {
+            if (!confirm('Esto intentará crear los usuarios demo (Admin, Prof, Paciente). ¿Continuar?')) return;
+
+            const demos = [
+                { email: 'admin@julielle.com', pass: 'admin123', role: 'admin', name: 'Admin User' },
+                { email: 'profesional@julielle.com', pass: 'prof123', role: 'professional', name: 'Dra. Morcilla' },
+                { email: 'paciente@test.com', pass: 'user123', role: 'patient', name: 'Paciente Demo' }
+            ];
+
+            this.showNotification('Iniciando restauración de usuarios...');
+
+            try {
+                // Ensure we are logged out first
+                await supabase.auth.signOut();
+
+                for (const user of demos) {
+                    console.log(`Creating ${user.role}...`);
+                    // 1. SignUp
+                    const { data, error } = await supabase.auth.signUp({
+                        email: user.email,
+                        password: user.pass
+                    });
+
+                    if (error) {
+                        console.warn(`User ${user.email} exists or error:`, error.message);
+                        // If exists, try to login to update role/link
+                        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+                            email: user.email,
+                            password: user.pass
+                        });
+                        if (!loginError && loginData.session) {
+                            // Proceed to update profile
+                        } else {
+                            // Can't do anything if we can't login
+                            continue;
+                        }
+                    }
+
+                    // 2. Get User ID (from sign up or login)
+                    const { data: sessionData } = await supabase.auth.getSession();
+                    const uid = sessionData.session?.user?.id;
+
+                    if (uid) {
+                        // 3. Update Profile Role
+                        await supabase.from('profiles').upsert({
+                            id: uid,
+                            email: user.email,
+                            name: user.name,
+                            role: user.role
+                        });
+
+                        // 4. Special Case: Link Professional
+                        if (user.role === 'professional') {
+                            // Find the professional record and link it
+                            // Assuming "Dra. Morcilla" exists from seed, we link to her
+                            const { data: profs } = await supabase.from('professionals').select('*').eq('name', 'Dra. Morcilla'); // Hardcoded match for demo
+                            if (profs && profs.length > 0) {
+                                await supabase.from('professionals').update({ user_id: uid }).eq('id', profs[0].id);
+                                console.log('Linked Professional profile');
+                            }
+                        }
+                    }
+
+                    // Logout to process next
+                    await supabase.auth.signOut();
+                }
+
+                this.showNotification('¡Usuarios Demo Restaurados! Prueba ingresar ahora.');
+            } catch (err) {
+                console.error(err);
+                this.showNotification('Error en restauración. Ver consola.');
             }
         },
 
