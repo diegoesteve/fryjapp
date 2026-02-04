@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurar Usuarios - Final</title>
+    <!-- Same CDN as index.html -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1rem;
+            color: #333;
+        }
+
+        .card {
+            background: #f0fdf4;
+            border: 2px solid #16a34a;
+            padding: 2rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #166534;
+        }
+
+        button {
+            background: #16a34a;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #15803d;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: default;
+        }
+
+        #status {
+            margin-top: 1rem;
+            font-weight: bold;
+            font-size: 1.2rem;
+            min-height: 1.5rem;
+        }
+
+        #logs {
+            background: #111;
+            color: #0f0;
+            padding: 1rem;
+            margin-top: 2rem;
+            border-radius: 8px;
+            height: 300px;
+            overflow-y: auto;
+            text-align: left;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h1>Restauración de Usuarios (Versión Final)</h1>
+        <p>Si ves este cuadro VERDE, estás en la versión correcta.</p>
+        <p>Haz clic en el botón para reparar el acceso.</p>
+
+        <button id="btn-start" onclick="startRestore()">INICIAR REPARACIÓN</button>
+
+        <div id="status">Esperando...</div>
+    </div>
+
+    <div id="logs">LOGS DEL SISTEMA:</div>
+
+    <script>
+        // Supabase Config
+        const SUPABASE_URL = 'https://mmoaptsmulsuvdtepiot.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb2FwdHNtdWxzdXZkdGVwaW90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MDgwNTgsImV4cCI6MjA4NDk4NDA1OH0.yvk_xOmDQFLgqNmvjJUd9Cnwvvm90Bnd26MrlyJj6bU';
+
+        let supabase;
+
+        function log(msg) {
+            const el = document.getElementById('logs');
+            el.innerHTML += `\n[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function setStatus(msg, color = 'black') {
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.style.color = color;
+        }
+
+        async function startRestore() {
+            const btn = document.getElementById('btn-start');
+            btn.disabled = true;
+            setStatus("Iniciando...", "blue");
+
+            log("--- INICIO DEL PROCESO ---");
+
+            if (typeof window.supabase === 'undefined') {
+                log("ERROR CRÍTICO: La librería Supabase no cargó.");
+                setStatus("Error: Librería no cargada", "red");
+                return;
+            }
+
+            try {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                log("Cliente Supabase creado.");
+            } catch (e) {
+                log(`Error creando cliente: ${e.message}`);
+                setStatus("Error de conexión", "red");
+                return;
+            }
+
+            const users = [
+                { email: 'admin@lumina.com', password: 'lumina2024', role: 'admin', name: 'Administrador Demo', phone: '1111-1111' },
+                { email: 'profesional@lumina.com', password: 'lumina2024', role: 'professional', name: 'Dra. Morcilla', phone: '2222-2222', professionalLinkName: 'Dra. Morcilla' },
+                { email: 'paciente@lumina.com', password: 'lumina2024', role: 'patient', name: 'Paciente Demo', phone: '3333-3333' }
+            ];
+
+            for (const u of users) {
+                log(`\nProcesando: ${u.email}`);
+                setStatus(`Reparando ${u.name}...`, "blue");
+
+                try {
+                    // Try SignUp
+                    let { data: upData, error: upError } = await supabase.auth.signUp({
+                        email: u.email,
+                        password: u.password,
+                        options: { data: { name: u.name, role: u.role } }
+                    });
+
+                    let userId = upData?.user?.id;
+
+                    if (upError) {
+                        log(`  Registro falló (normal si existe): ${upError.message}`);
+                        // Try SignIn
+                        const { data: inData, error: inError } = await supabase.auth.signInWithPassword({
+                            email: u.email,
+                            password: u.password
+                        });
+
+                        if (inError) {
+                            log(`  ERROR LOGIN: ${inError.message}`);
+                            continue;
+                        }
+                        userId = inData.user.id;
+                        log(`  Login OK. ID recuperado.`);
+                    } else if (userId) {
+                        log(`  Usuario creado OK.`);
+                    }
+
+                    if (userId) {
+                        // Profile
+                        const { error: pErr } = await supabase.from('profiles').upsert({
+                            id: userId, email: u.email, name: u.name, role: u.role, phone: u.phone
+                        });
+                        if (pErr) log(`  Error Perfil: ${pErr.message}`);
+                        else log(`  Perfil actualizado.`);
+
+                        // Link Prof
+                        if (u.role === 'professional') {
+                            const { data: prof } = await supabase.from('professionals').select('id').eq('name', u.professionalLinkName).single();
+                            if (prof) {
+                                await supabase.from('professionals').update({ user_id: userId }).eq('id', prof.id);
+                                log(`  Profesional vinculado.`);
+                            }
+                        }
+                    }
+
+                } catch (err) {
+                    log(`  Error inesperado: ${err.message}`);
+                }
+            }
+
+            log("\n--- FIN DEL PROCESO ---");
+            setStatus("¡PROCESO COMPLETADO! Ya puedes ingresar.", "green");
+            btn.textContent = "FINALIZADO";
+        }
+    </script>
+</body>
+
+</html>
