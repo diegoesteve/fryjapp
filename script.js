@@ -317,6 +317,11 @@
             nav.innerHTML = navHtml;
         },
 
+        toggleMenu() {
+            const nav = document.querySelector('.nav-links');
+            nav.classList.toggle('active');
+        },
+
         startBooking(serviceId = null, professionalId = null, bookingForEmail = null) {
             this.selectedService = serviceId;
             this.selectedProfessional = professionalId;
@@ -2193,9 +2198,7 @@
                     <button onclick="turnoApp.login('paciente_v2@test.com', 'lumina2024')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Paciente</button>
                     <button onclick="turnoApp.login('prof_v2@julielle.com', 'lumina2024')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
                 </div>        </div>
-                        <div style="text-align: center; margin-top: 1rem;">
-                             <button onclick="turnoApp.setupDemoUsers()" class="btn-secondary" style="font-size: 0.8rem; padding: 0.5rem 1rem; color: #d9534f; border-color: #d9534f;">🛠️ Restaurar Usuarios Demo</button>
-                        </div>
+
                     </div>
                 </div>
             </section>

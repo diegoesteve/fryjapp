@@ -203,6 +203,9 @@
         },
 
         async login(email, password) {
+            // DEBUG: Remove after verification
+            console.log(`Intento de login: ${email}`);
+
             const { data, error } = await supabase.auth.signInWithPassword({
                 email: email,
                 password: password
@@ -312,6 +315,11 @@
             }
 
             nav.innerHTML = navHtml;
+        },
+
+        toggleMenu() {
+            const nav = document.querySelector('.nav-links');
+            nav.classList.toggle('active');
         },
 
         startBooking(serviceId = null, professionalId = null, bookingForEmail = null) {
@@ -2186,13 +2194,11 @@
                         </div>
 
                         <div class="auth-btn-group" style="margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem;">
-                            <button onclick="turnoApp.login('admin@julielle.com', 'admin123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Admin</button>
-                            <button onclick="turnoApp.login('paciente@test.com', 'user123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Paciente</button>
-                            <button onclick="turnoApp.login('profesional@julielle.com', 'prof123')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
-                        </div>
-                        <div style="text-align: center; margin-top: 1rem;">
-                             <button onclick="turnoApp.setupDemoUsers()" class="btn-secondary" style="font-size: 0.8rem; padding: 0.5rem 1rem; color: #d9534f; border-color: #d9534f;">🛠️ Restaurar Usuarios Demo</button>
-                        </div>
+                    <button onclick="turnoApp.login('admin_v2@julielle.com', 'lumina2024')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Admin</button>
+                    <button onclick="turnoApp.login('paciente_v2@test.com', 'lumina2024')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Paciente</button>
+                    <button onclick="turnoApp.login('prof_v2@julielle.com', 'lumina2024')" style="background:none; border:none; color: #ccc; cursor: pointer; font-size: 0.8rem;">Demo Prof</button>
+                </div>        </div>
+
                     </div>
                 </div>
             </section>
@@ -2271,49 +2277,44 @@
         },
 
         async setupDemoUsers() {
-            if (!confirm('Esto intentará crear los usuarios demo (Admin, Prof, Paciente). ¿Continuar?')) return;
+            if (!confirm('Esto intentará reparar los usuarios demo (Admin, Prof, Paciente). ¿Continuar?')) return;
 
+            // Updated V2 credentials to ensure fresh accounts
             const demos = [
-                { email: 'admin@julielle.com', pass: 'admin123', role: 'admin', name: 'Admin User' },
-                { email: 'profesional@julielle.com', pass: 'prof123', role: 'professional', name: 'Dra. Morcilla' },
-                { email: 'paciente@test.com', pass: 'user123', role: 'patient', name: 'Paciente Demo' }
+                { email: 'admin_v2@julielle.com', pass: 'lumina2024', role: 'admin', name: 'Admin Demo' },
+                { email: 'prof_v2@julielle.com', pass: 'lumina2024', role: 'professional', name: 'Dra. Morcilla' },
+                { email: 'paciente_v2@test.com', pass: 'lumina2024', role: 'patient', name: 'Paciente Demo' }
             ];
 
-            this.showNotification('Iniciando restauración de usuarios...');
+            this.showNotification('Iniciando reparación de usuarios...');
 
             try {
-                // Ensure we are logged out first
                 await supabase.auth.signOut();
 
                 for (const user of demos) {
-                    console.log(`Creating ${user.role}...`);
                     // 1. SignUp
-                    const { data, error } = await supabase.auth.signUp({
+                    let { data, error } = await supabase.auth.signUp({
                         email: user.email,
-                        password: user.pass
+                        password: user.pass,
+                        options: { data: { name: user.name, role: user.role } }
                     });
 
+                    let uid = data?.user?.id;
+
                     if (error) {
-                        console.warn(`User ${user.email} exists or error:`, error.message);
-                        // If exists, try to login to update role/link
-                        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+                        // Fallback login
+                        const loginRes = await supabase.auth.signInWithPassword({
                             email: user.email,
                             password: user.pass
                         });
-                        if (!loginError && loginData.session) {
-                            // Proceed to update profile
-                        } else {
-                            // Can't do anything if we can't login
-                            continue;
+
+                        if (loginRes.data?.session) {
+                            uid = loginRes.data.session.user.id;
                         }
                     }
 
-                    // 2. Get User ID (from sign up or login)
-                    const { data: sessionData } = await supabase.auth.getSession();
-                    const uid = sessionData.session?.user?.id;
-
                     if (uid) {
-                        // 3. Update Profile Role
+                        // 2. Restore Profile
                         await supabase.from('profiles').upsert({
                             id: uid,
                             email: user.email,
@@ -2321,26 +2322,23 @@
                             role: user.role
                         });
 
-                        // 4. Special Case: Link Professional
+                        // 3. Link Professional
                         if (user.role === 'professional') {
-                            // Find the professional record and link it
-                            // Assuming "Dra. Morcilla" exists from seed, we link to her
-                            const { data: profs } = await supabase.from('professionals').select('*').eq('name', 'Dra. Morcilla'); // Hardcoded match for demo
+                            const { data: profs } = await supabase.from('professionals').select('*').eq('name', user.name);
                             if (profs && profs.length > 0) {
                                 await supabase.from('professionals').update({ user_id: uid }).eq('id', profs[0].id);
-                                console.log('Linked Professional profile');
                             }
                         }
                     }
-
-                    // Logout to process next
                     await supabase.auth.signOut();
                 }
 
-                this.showNotification('¡Usuarios Demo Restaurados! Prueba ingresar ahora.');
+                this.showNotification('¡Reparación Completa! Usa los botones Demo nuevos.');
+                alert('Usuarios actualizados a V2. Usa los botones "Demo" para entrar.');
+
             } catch (err) {
                 console.error(err);
-                this.showNotification('Error en restauración. Ver consola.');
+                alert('Error: ' + err.message);
             }
         },
 

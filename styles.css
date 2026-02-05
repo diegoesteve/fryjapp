@@ -21,6 +21,11 @@
 
     --text: #333333;
     --text-light: #666666;
+    --text-main: #333333;
+    /* Added missing var */
+
+    --bg-white: #ffffff;
+    /* Added missing var */
 
     /* Typography */
     --font-heading: 'Playfair Display', serif;
@@ -144,14 +149,16 @@ h4 {
 
 /* Featured Reservation Button */
 .nav-links .btn-primary {
-    background-color: var(--primary);
-    color: var(--bg-white);
-    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
+    background: linear-gradient(135deg, #d4af37 0%, #f3e5ab 100%) !important;
+    color: var(--primary) !important;
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 .nav-links .btn-primary:hover {
-    background-color: var(--primary-dark);
-    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.6);
+    background: linear-gradient(135deg, #f3e5ab 0%, #d4af37 100%) !important;
+    /* Slightly lighter/reversed gradient for hover */
+    color: var(--primary) !important;
 }
 
 .mobile-menu-btn {
@@ -381,6 +388,19 @@ h4 {
 @media (max-width: 768px) {
     .nav-links {
         display: none;
+        flex-direction: column;
+        position: absolute;
+        top: var(--nav-height);
+        left: 0;
+        width: 100%;
+        background: white;
+        padding: 2rem;
+        box-shadow: var(--shadow-md);
+        border-top: 1px solid #f1f1f1;
+    }
+
+    .nav-links.active {
+        display: flex;
     }
 
     .mobile-menu-btn {
