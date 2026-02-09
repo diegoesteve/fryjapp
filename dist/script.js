@@ -50,8 +50,19 @@
                     this.fetchProfessionals()
                 ]);
 
-                // 3. UI
-                this.renderHome();
+                // 3. UI - Initial Routing
+                const urlHash = window.location.hash.replace('#', '');
+
+                if (urlHash && UserCanAccess(urlHash)) {
+                    this.navigate(urlHash, null, false);
+                } else if (state.currentUser && state.currentUser.role === 'admin') {
+                    this.navigate('admin', null, false);
+                } else if (state.currentUser && state.currentUser.role === 'professional') {
+                    this.navigate('my-bookings', null, false);
+                } else {
+                    this.renderHome();
+                }
+
                 this.updateIcons();
                 this.updateNav();
 
@@ -134,6 +145,12 @@
             if (view === 'my-bookings' && !state.currentUser) {
                 return this.navigate('login');
             }
+            // Strict Admin Segregation
+            const publicViews = ['home', 'services', 'professionals', 'service-detail', 'professional-profile'];
+            if (state.currentUser && state.currentUser.role === 'admin' && publicViews.includes(view)) {
+                return this.navigate('admin');
+            }
+
             if (view === 'booking' && !state.currentUser) {
                 this.selectedService = this.selectedService || params; // Preserve service selection
                 this.navigate('login');
@@ -228,7 +245,14 @@
                 if (serviceId) this.selectedService = serviceId;
                 if (professionalId) this.selectedProfessional = professionalId;
             } else {
-                this.navigate('home');
+                // Role-based redirect
+                if (state.currentUser.role === 'admin') {
+                    this.navigate('admin');
+                } else if (state.currentUser.role === 'professional') {
+                    this.navigate('my-bookings'); // Or a professional dashboard if we make one
+                } else {
+                    this.navigate('home');
+                }
             }
             this.updateNav();
         },
@@ -290,28 +314,46 @@
             const nav = document.querySelector('.nav-links');
             const user = state.currentUser;
 
-            let navHtml = `
-            <button onclick="turnoApp.navigate('home')" class="nav-btn">Inicio</button>
-            <button onclick="turnoApp.navigate('services')" class="nav-btn">Servicios</button>
-            <button onclick="turnoApp.navigate('professionals')" class="nav-btn">Profesionales</button>
-        `;
+            let navHtml = '';
 
             if (user) {
                 if (user.role === 'admin') {
-                    navHtml += `<button onclick="turnoApp.navigate('admin')" class="nav-btn secondary">Admin</button>`;
+                    // ADMIN NAVIGATION
+                    navHtml = `
+                        <button onclick="turnoApp.navigate('admin')" class="nav-btn ${state.currentView === 'admin' ? 'active' : ''}">Panel</button>
+                        <button onclick="turnoApp.navigate('patients')" class="nav-btn ${state.currentView === 'patients' ? 'active' : ''}">Pacientes</button>
+                        <button onclick="turnoApp.navigate('reports')" class="nav-btn ${state.currentView === 'reports' ? 'active' : ''}">Reportes</button>
+                        <button onclick="turnoApp.navigate('services-management')" class="nav-btn ${state.currentView === 'services-management' ? 'active' : ''}">Servicios</button>
+                        <button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>
+                    `;
+                } else if (user.role === 'professional') {
+                    // PROFESSIONAL NAVIGATION
+                    navHtml = `
+                        <button onclick="turnoApp.navigate('my-bookings')" class="nav-btn ${state.currentView === 'my-bookings' ? 'active' : ''}">Mis Turnos</button>
+                        <button onclick="turnoApp.navigate('patients')" class="nav-btn ${state.currentView === 'patients' ? 'active' : ''}">Pacientes</button>
+                        <button onclick="turnoApp.navigate('reports')" class="nav-btn ${state.currentView === 'reports' ? 'active' : ''}">Mis Ingresos</button>
+                         <button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>
+                    `;
                 } else {
-                    navHtml += `<button onclick="turnoApp.navigate('my-bookings')" class="nav-btn">Mis Turnos</button>`;
+                    // PATIENT NAVIGATION (Logged In)
+                    navHtml = `
+                        <button onclick="turnoApp.navigate('home')" class="nav-btn ${state.currentView === 'home' ? 'active' : ''}">Inicio</button>
+                        <button onclick="turnoApp.navigate('services')" class="nav-btn ${state.currentView === 'services' ? 'active' : ''}">Servicios</button>
+                        <button onclick="turnoApp.navigate('professionals')" class="nav-btn ${state.currentView === 'professionals' ? 'active' : ''}">Profesionales</button>
+                        <button onclick="turnoApp.navigate('my-bookings')" class="nav-btn ${state.currentView === 'my-bookings' ? 'active' : ''}">Mis Turnos</button>
+                        <button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>
+                        <button onclick="turnoApp.startBooking()" class="btn-primary">Reservar</button>
+                    `;
                 }
-                // ENH-26/27: Patient Management Button (Admin & Prof)
-                if (user.role === 'admin' || user.role === 'professional') {
-                    navHtml += `<button onclick="turnoApp.navigate('patients')" class="nav-btn">Pacientes</button>`;
-                }
-
-                navHtml += `<button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>`;
-                navHtml += `<button onclick="turnoApp.startBooking()" class="btn-primary">Reservar</button>`;
             } else {
-                navHtml += `<button onclick="turnoApp.navigate('login')" class="nav-btn">Ingresar</button>`;
-                navHtml += `<button onclick="turnoApp.startBooking()" class="btn-primary">Reservar Turno</button>`;
+                // PUBLIC NAVIGATION (Guest)
+                navHtml = `
+                    <button onclick="turnoApp.navigate('home')" class="nav-btn ${state.currentView === 'home' ? 'active' : ''}">Inicio</button>
+                    <button onclick="turnoApp.navigate('services')" class="nav-btn ${state.currentView === 'services' ? 'active' : ''}">Servicios</button>
+                    <button onclick="turnoApp.navigate('professionals')" class="nav-btn ${state.currentView === 'professionals' ? 'active' : ''}">Profesionales</button>
+                    <button onclick="turnoApp.navigate('login')" class="nav-btn">Ingresar</button>
+                    <button onclick="turnoApp.startBooking()" class="btn-primary">Reservar Turno</button>
+                `;
             }
 
             nav.innerHTML = navHtml;
