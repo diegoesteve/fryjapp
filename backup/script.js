@@ -20,7 +20,7 @@
         // UI Filters
         adminFilters: { professionalId: '', status: '', month: '' },
         reportFilters: { startDate: '', endDate: '', professionalId: '' },
-        agendaView: { viewMode: 'month', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: new Date() },
+        agendaView: { mode: 'list', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: null },
         visibleServicesCount: 4,
         isLoading: false
     };
@@ -50,8 +50,19 @@
                     this.fetchProfessionals()
                 ]);
 
-                // 3. UI
-                this.renderHome();
+                // 3. UI - Initial Routing
+                const urlHash = window.location.hash.replace('#', '');
+
+                if (urlHash && UserCanAccess(urlHash)) {
+                    this.navigate(urlHash, null, false);
+                } else if (state.currentUser && state.currentUser.role === 'admin') {
+                    this.navigate('admin', null, false);
+                } else if (state.currentUser && state.currentUser.role === 'professional') {
+                    this.navigate('my-bookings', null, false);
+                } else {
+                    this.renderHome();
+                }
+
                 this.updateIcons();
                 this.updateNav();
 
@@ -134,6 +145,12 @@
             if (view === 'my-bookings' && !state.currentUser) {
                 return this.navigate('login');
             }
+            // Strict Admin Segregation
+            const publicViews = ['home', 'services', 'professionals', 'service-detail', 'professional-profile'];
+            if (state.currentUser && state.currentUser.role === 'admin' && publicViews.includes(view)) {
+                return this.navigate('admin');
+            }
+
             if (view === 'booking' && !state.currentUser) {
                 this.selectedService = this.selectedService || params; // Preserve service selection
                 this.navigate('login');
@@ -228,7 +245,14 @@
                 if (serviceId) this.selectedService = serviceId;
                 if (professionalId) this.selectedProfessional = professionalId;
             } else {
-                this.navigate('home');
+                // Role-based redirect
+                if (state.currentUser.role === 'admin') {
+                    this.navigate('admin');
+                } else if (state.currentUser.role === 'professional') {
+                    this.navigate('my-bookings'); // Or a professional dashboard if we make one
+                } else {
+                    this.navigate('home');
+                }
             }
             this.updateNav();
         },
@@ -286,107 +310,50 @@
             localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
         },
 
-        renderSidebar() {
-            // Remove existing sidebar if any
-            const existing = document.getElementById('sidebar');
-            if (existing) existing.remove();
-
-            // Only show for backend roles
-            if (!state.currentUser || state.currentUser.role === 'patient') {
-                document.body.classList.remove('with-sidebar');
-                document.body.classList.remove('sidebar-collapsed');
-                return;
-            }
-
-            const isCollapsed = state.sidebarCollapsed;
-            document.body.classList.add('with-sidebar');
-            if (isCollapsed) document.body.classList.add('sidebar-collapsed');
-
-            const menuItems = [
-                { id: 'home', icon: 'layout-dashboard', label: 'Panel Principal', role: ['admin', 'professional'] },
-                { id: 'calendar', icon: 'calendar', label: 'Agenda', role: ['admin', 'professional'] },
-                { id: 'patients', icon: 'users', label: 'Pacientes', role: ['admin', 'professional'] },
-                { id: 'services-management', icon: 'sparkles', label: 'Servicios', role: ['admin'] },
-                { id: 'reports', icon: 'bar-chart-3', label: 'Reportes', role: ['admin'] },
-                { id: 'settings', icon: 'settings', label: 'Configuración', role: ['admin'] }
-            ];
-
-            const sidebarHTML = `
-                <aside id="sidebar" class="${isCollapsed ? 'collapsed' : ''}">
-                    <div class="sidebar-header">
-                        <div class="logo-text">JuliEsteve<span style="color:var(--secondary)">.</span></div>
-                        <button class="collapse-btn" onclick="turnoApp.toggleSidebar()">
-                            <i data-lucide="${isCollapsed ? 'chevrons-right' : 'chevrons-left'}"></i>
-                        </button>
-                    </div>
-                    <nav class="sidebar-nav">
-                        ${menuItems.filter(item => item.role.includes(state.currentUser.role)).map(item => `
-                            <div class="sidebar-nav-item ${state.currentView === item.id || (state.currentView === 'admin' && item.id === 'home') || (state.currentView === 'my-bookings' && item.id === 'home') ? 'active' : ''}" 
-                                 onclick="turnoApp.navigate('${item.id === 'home' && state.currentUser.role === 'admin' ? 'admin' : item.id === 'home' ? 'my-bookings' : item.id}')">
-                                <i data-lucide="${item.icon}"></i>
-                                <span>${item.label}</span>
-                            </div>
-                        `).join('')}
-                    </nav>
-                    <div class="sidebar-footer">
-                         <div class="sidebar-nav-item" onclick="turnoApp.logout()">
-                            <i data-lucide="log-out"></i>
-                            <span>Cerrar Sesión</span>
-                        </div>
-                    </div>
-                </aside>
-            `;
-
-            document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
-            if (window.lucide) lucide.createIcons();
-        },
-
-        toggleSidebar() {
-            state.sidebarCollapsed = !state.sidebarCollapsed;
-            localStorage.setItem('lumina_sidebar_collapsed', state.sidebarCollapsed);
-
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) {
-                sidebar.classList.toggle('collapsed');
-                const btnIcon = sidebar.querySelector('.collapse-btn i');
-                if (btnIcon) {
-                    btnIcon.setAttribute('data-lucide', state.sidebarCollapsed ? 'chevrons-right' : 'chevrons-left');
-                    if (window.lucide) lucide.createIcons();
-                }
-            }
-
-            document.body.classList.toggle('sidebar-collapsed');
-        },
-
         updateNav() {
-            this.renderSidebar();
-
             const nav = document.querySelector('.nav-links');
-            if (!nav) return;
             const user = state.currentUser;
 
-            let navHtml = `
-            <button onclick="turnoApp.navigate('home')" class="nav-btn">Inicio</button>
-            <button onclick="turnoApp.navigate('services')" class="nav-btn">Servicios</button>
-            <button onclick="turnoApp.navigate('professionals')" class="nav-btn">Profesionales</button>
-        `;
+            let navHtml = '';
 
             if (user) {
                 if (user.role === 'admin') {
-                    navHtml += `<button onclick="turnoApp.navigate('admin')" class="nav-btn secondary">Admin</button>`;
+                    // ADMIN NAVIGATION
+                    navHtml = `
+                        <button onclick="turnoApp.navigate('admin')" class="nav-btn ${state.currentView === 'admin' ? 'active' : ''}">Panel</button>
+                        <button onclick="turnoApp.navigate('patients')" class="nav-btn ${state.currentView === 'patients' ? 'active' : ''}">Pacientes</button>
+                        <button onclick="turnoApp.navigate('reports')" class="nav-btn ${state.currentView === 'reports' ? 'active' : ''}">Reportes</button>
+                        <button onclick="turnoApp.navigate('services-management')" class="nav-btn ${state.currentView === 'services-management' ? 'active' : ''}">Servicios</button>
+                        <button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>
+                    `;
                 } else if (user.role === 'professional') {
-                    navHtml += `<button onclick="turnoApp.navigate('my-bookings')" class="nav-btn">Mis Turnos</button>`;
+                    // PROFESSIONAL NAVIGATION
+                    navHtml = `
+                        <button onclick="turnoApp.navigate('my-bookings')" class="nav-btn ${state.currentView === 'my-bookings' ? 'active' : ''}">Mis Turnos</button>
+                        <button onclick="turnoApp.navigate('patients')" class="nav-btn ${state.currentView === 'patients' ? 'active' : ''}">Pacientes</button>
+                        <button onclick="turnoApp.navigate('reports')" class="nav-btn ${state.currentView === 'reports' ? 'active' : ''}">Mis Ingresos</button>
+                         <button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>
+                    `;
                 } else {
-                    navHtml += `<button onclick="turnoApp.navigate('my-bookings')" class="nav-btn">Mis Turnos</button>`;
-                }
-
-                navHtml += `<button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>`;
-                if (user.role === 'patient') {
-                    navHtml += `<button onclick="turnoApp.startBooking()" class="btn-primary">Reservar</button>`;
+                    // PATIENT NAVIGATION (Logged In)
+                    navHtml = `
+                        <button onclick="turnoApp.navigate('home')" class="nav-btn ${state.currentView === 'home' ? 'active' : ''}">Inicio</button>
+                        <button onclick="turnoApp.navigate('services')" class="nav-btn ${state.currentView === 'services' ? 'active' : ''}">Servicios</button>
+                        <button onclick="turnoApp.navigate('professionals')" class="nav-btn ${state.currentView === 'professionals' ? 'active' : ''}">Profesionales</button>
+                        <button onclick="turnoApp.navigate('my-bookings')" class="nav-btn ${state.currentView === 'my-bookings' ? 'active' : ''}">Mis Turnos</button>
+                        <button onclick="turnoApp.logout()" class="nav-btn" style="color: #666;">Salir (${user.name})</button>
+                        <button onclick="turnoApp.startBooking()" class="btn-primary">Reservar</button>
+                    `;
                 }
             } else {
-                navHtml += `<button onclick="turnoApp.navigate('login')" class="nav-btn">Ingresar</button>`;
-                navHtml += `<button onclick="turnoApp.startBooking()" class="btn-primary">Reservar Turno</button>`;
+                // PUBLIC NAVIGATION (Guest)
+                navHtml = `
+                    <button onclick="turnoApp.navigate('home')" class="nav-btn ${state.currentView === 'home' ? 'active' : ''}">Inicio</button>
+                    <button onclick="turnoApp.navigate('services')" class="nav-btn ${state.currentView === 'services' ? 'active' : ''}">Servicios</button>
+                    <button onclick="turnoApp.navigate('professionals')" class="nav-btn ${state.currentView === 'professionals' ? 'active' : ''}">Profesionales</button>
+                    <button onclick="turnoApp.navigate('login')" class="nav-btn">Ingresar</button>
+                    <button onclick="turnoApp.startBooking()" class="btn-primary">Reservar Turno</button>
+                `;
             }
 
             nav.innerHTML = navHtml;
@@ -1332,17 +1299,6 @@
                 });
             }
 
-            const icons = [
-                { val: 'sparkles', label: 'Brillos (Estética/Facial)' },
-                { val: 'sun', label: 'Sol (Relax/Masajes)' },
-                { val: 'moon', label: 'Luna (Noche/Relax)' },
-                { val: 'heart', label: 'Corazón (Cuidado/Uñas)' },
-                { val: 'star', label: 'Estrella (Destacado)' },
-                { val: 'zap', label: 'Rayo (Rápido/Láser)' },
-                { val: 'droplets', label: 'Gotas (Hidratación/Spa)' },
-                { val: 'feather', label: 'Pluma (Suave/Sensitivo)' }
-            ];
-
             const content = `
         <div class="modal-header">
             <h3>${title}</h3>
@@ -1376,9 +1332,7 @@
                 </div>
                  <div class="form-group">
                     <label class="form-label">Icono (Lucide)</label>
-                    <select name="icon" class="form-select">
-                        ${icons.map(i => `<option value="${i.val}" ${service && service.icon === i.val ? 'selected' : ''}>${i.label}</option>`).join('')}
-                    </select>
+                    <input type="text" name="icon" class="form-input" value="${service ? service.icon : 'sparkles'}" placeholder="e.g. star, heart">
                 </div>
             </div>
 
@@ -1988,7 +1942,7 @@
 
         // Toggle Admin View Mode
         setAdminViewMode(mode) {
-            state.agendaView.viewMode = mode;
+            state.agendaView.mode = mode;
             this.renderAdmin();
         },
 
@@ -2006,38 +1960,35 @@
 
         renderAdmin() {
             const main = document.getElementById('main-content');
-            const viewMode = state.agendaView.viewMode || 'month';
-
-            let calendarHTML = '';
-            if (viewMode === 'month') {
-                calendarHTML = this.getAdminCalendarHTML();
-            } else if (viewMode === 'week') {
-                calendarHTML = this.getAdminWeekHTML();
-            } else if (viewMode === 'day') {
-                calendarHTML = this.getAdminDayHTML();
-            }
+            const isCalendar = state.agendaView.mode === 'calendar';
 
             main.innerHTML = `
             <section class="section">
                 <div class="container">
                     <div class="section-header">
-                        <h2>Agenda Admin</h2>
+                        <h2>Panel de Administración</h2>
                         <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                              <div class="view-toggle">
-                                <button onclick="turnoApp.setAdminViewMode('month')" class="${viewMode === 'month' ? 'active' : ''}">Mes</button>
-                                <button onclick="turnoApp.setAdminViewMode('week')" class="${viewMode === 'week' ? 'active' : ''}">Semana</button>
-                                <button onclick="turnoApp.setAdminViewMode('day')" class="${viewMode === 'day' ? 'active' : ''}">Día</button>
+                                <button onclick="turnoApp.setAdminViewMode('list')" class="${!isCalendar ? 'active' : ''}">Lista</button>
+                                <button onclick="turnoApp.setAdminViewMode('calendar')" class="${isCalendar ? 'active' : ''}">Calendario</button>
                              </div>
-                             <button onclick="turnoApp.navigate('reports')" class="btn-secondary">Reportes</button>
-                             <button onclick="turnoApp.navigate('patients')" class="btn-secondary">Pacientes</button>
+                             <button onclick="turnoApp.navigate('reports')" class="btn-secondary">Reportes Financieros</button>
+                             <button onclick="turnoApp.navigate('patients')" class="btn-secondary">Maestro Pacientes</button>
                              <button onclick="turnoApp.navigate('services-management')" class="btn-secondary">Gestión Servicios</button>
                         </div>
                     </div>
 
-                    ${calendarHTML}
+                    ${isCalendar ? this.getAdminCalendarHTML() : this.getAdminListHTML()}
                 </div>
             </section>
         `;
+
+            if (!isCalendar) {
+                // Re-attach values for list filters (simulated persistence)
+                if (document.getElementById('filter-prof')) document.getElementById('filter-prof').value = state.adminFilters.professionalId;
+                if (document.getElementById('filter-status')) document.getElementById('filter-status').value = state.adminFilters.status;
+                if (document.getElementById('filter-month')) document.getElementById('filter-month').value = state.adminFilters.month;
+            }
         },
 
         getAdminListHTML() {
@@ -2606,134 +2557,7 @@
                 this.showNotification('Reserva actualizada');
                 this.renderAdmin();
             }
-        },
-
-        getAdminWeekHTML() {
-            const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
-            const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
-            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
-            const startOfWeek = new Date(currentDate.setDate(diff));
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-            const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-            const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-
-            let weekGrid = `<div class="week-view-container" style="display: flex; gap: 10px; overflow-x: auto;">`;
-
-            for (let i = 0; i < 7; i++) {
-                const dayDate = new Date(startOfWeek);
-                dayDate.setDate(startOfWeek.getDate() + i);
-                const dateStr = dayDate.toISOString().split('T')[0];
-                const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
-                const dayNum = dayDate.getDate();
-                const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                const isSelected = state.agendaView.selectedDay && new Date(state.agendaView.selectedDay).toISOString().split('T')[0] === dateStr;
-
-                const dayBookings = state.bookings.filter(b => b.date === dateStr && b.status !== 'Cancelado');
-
-                weekGrid += `
-                <div class="week-day-column ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" 
-                     onclick="turnoApp.showDayDetails('${dateStr}')" 
-                     style="flex: 1; min-width: 120px; border: 1px solid #eee; border-radius: 8px; padding: 10px; background: ${isToday ? '#f0f9ff' : 'white'}; cursor: pointer;">
-                    <div style="font-weight: bold; text-align: center; margin-bottom: 5px; color: #555;">${dayName} ${dayNum}</div>
-                    <div class="day-bookings-list" style="font-size: 0.8rem;">
-                        ${dayBookings.length > 0 ? dayBookings.map(b => `
-                            <div style="background: ${this.getServiceColor(b.serviceId)}; color: white; padding: 2px 4px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                ${b.time} ${b.clientName.split(' ')[0]}
-                            </div>
-                        `).join('') : '<div style="color: #ccc; text-align: center;">-</div>'}
-                    </div>
-                </div>`;
-            }
-            weekGrid += `</div>`;
-
-            return `
-            <div class="calendar-container">
-                <div class="calendar-header">
-                     <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">â† </button>
-                     <h3>Semana ${startStr} - ${endStr}</h3>
-                     <button onclick="turnoApp.changeWeek(1)" class="btn-icon">â†’ </button>
-                </div>
-                ${weekGrid}
-            </div>`;
-        },
-
-        changeWeek(direction) {
-            const current = new Date(state.agendaView.selectedDay || new Date());
-            current.setDate(current.getDate() + (direction * 7));
-            state.agendaView.selectedDay = current;
-            state.agendaView.calendarMonth = current.getMonth();
-            state.agendaView.calendarYear = current.getFullYear();
-            this.renderAdmin();
-        },
-
-        getAdminDayHTML() {
-            const dateStr = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-            const dateObj = new Date(dateStr + 'T12:00:00'); // Safe date parsing
-            const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-            const dayBookings = state.bookings
-                .filter(b => b.date === dateStr && b.status !== 'Cancelado')
-                .sort((a, b) => a.time.localeCompare(b.time));
-
-            // Grid 8am - 8pm
-            const hours = [];
-            for (let h = 8; h <= 20; h++) {
-                hours.push(`${h.toString().padStart(2, '0')}:00`);
-            }
-
-            let dayGrid = `<div class="day-view-container" style="display: flex; flex-direction: column; gap: 5px;">`;
-
-            // Simple list for now, timeline view is complex
-            if (dayBookings.length === 0) {
-                dayGrid += `<div style="padding: 2rem; text-align: center; color: #666;">No hay turnos para este dÃ­a.</div>`;
-            } else {
-                dayGrid += dayBookings.map(b => `
-                    <div style="display: flex; gap: 1rem; padding: 10px; border: 1px solid #eee; border-radius: 8px; align-items: center; background: white;">
-                        <div style="font-weight: bold; width: 60px; color: var(--primary);">${b.time}</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600;">${b.serviceName} (${b.duration} min)</div>
-                            <div style="font-size: 0.9rem; color: #555;">${b.clientName}</div>
-                            <div style="font-size: 0.8rem; color: #888;">${b.professionalName}</div>
-                        </div>
-                        <div>
-                             <span class="status-badge ${b.status === 'Confirmado' ? 'confirmado' : 'pendiente'}">${b.status}</span>
-                        </div>
-                        <div>
-                             <button onclick="turnoApp.openBookingDetails(${b.id})" class="btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">Ver</button>
-                        </div>
-                    </div>
-                 `).join('');
-            }
-            dayGrid += `</div>`;
-
-            return `
-            <div class="calendar-container">
-                <div class="calendar-header">
-                     <button onclick="turnoApp.changeDay(-1)" class="btn-icon">â† </button>
-                     <h3>${prettyDate}</h3>
-                     <button onclick="turnoApp.changeDay(1)" class="btn-icon">â†’ </button>
-                </div>
-                ${dayGrid}
-            </div>`;
-        },
-
-        changeDay(direction) {
-            const current = new Date(state.agendaView.selectedDay || new Date());
-            current.setDate(current.getDate() + direction);
-            state.agendaView.selectedDay = current;
-            state.agendaView.calendarMonth = current.getMonth();
-            state.agendaView.calendarYear = current.getFullYear();
-            this.renderAdmin();
-        },
-
-        getServiceColor(serviceId) {
-            // Helper to color code bookings by service
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-            return colors[serviceId % colors.length] || '#64748b';
-        },
-
+        }
     };
 
     // Start App
