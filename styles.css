@@ -2,44 +2,54 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&display=swap');
 
 :root {
-    /* Palette: Luxury Minimal (Black, White, Beige/Gold) */
-    --primary: #1a1a1a;
-    /* Black/Charcoal */
-    --primary-light: #444444;
-    --primary-dark: #000000;
+    /* Palette: Fresh & Clean (Celeste + White) */
+    --primary: #00A8E8;
+    /* Cerulean/Celeste */
+    --primary-hover: #0090C8;
+    /* Darker Celeste for hover */
+    --primary-light: #E0F2FE;
+    /* Light Sky Blue for backgrounds */
+    --primary-dark: #0284C7;
+    /* Deep Blue for text/borders */
 
-    --secondary: #d4af37;
-    /* Gold/Bronze Accent */
-    --secondary-light: #f3e5ab;
+    --secondary: #334155;
+    /* Slate 700 - Neutral Dark for Text */
+    --secondary-light: #94A3B8;
+    /* Slate 400 */
 
-    --accent: #d4af37;
+    --accent: #00A8E8;
+    /* Same as primary for consistency */
 
-    --background: #ffffff;
-    /* Clean White */
-    --surface: #fdfbf7;
-    /* Very light beige/warm white */
+    --background: #FFFFFF;
+    /* Pure White */
+    --surface: #F8FAFC;
+    /* Slate 50 - Very light gray for panels */
+    --border: #E2E8F0;
+    /* Slate 200 - Subtle borders */
 
-    --text: #333333;
-    --text-light: #666666;
-    --text-main: #333333;
-    /* Added missing var */
+    --text: #1E293B;
+    /* Slate 800 - Main text */
+    --text-light: #64748B;
+    /* Slate 500 - Secondary text */
+    --text-main: #1E293B;
 
-    --bg-white: #ffffff;
-    /* Added missing var */
+    --bg-white: #FFFFFF;
 
     /* Typography */
     --font-heading: 'Playfair Display', serif;
+    /* Kept for elegance, but can be switched if requested */
     --font-body: 'Lato', sans-serif;
 
     /* Spacing & roundedness */
-    --radius-sm: 2px;
-    /* Sharper corners for luxury feel */
-    --radius-md: 4px;
-    --radius-lg: 8px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    /* Softer corners for friendly feel */
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 168, 232, 0.1);
+    /* Subtle blue-tinted shadow */
+    --shadow-lg: 0 10px 15px -3px rgba(0, 168, 232, 0.1);
 
     --container-width: 1200px;
     --nav-height: 80px;
@@ -130,8 +140,8 @@ h4 {
 }
 
 .btn-primary {
-    background-color: var(--secondary);
-    color: var(--primary);
+    background-color: var(--primary);
+    color: white;
     border: none;
     padding: 0.75rem 1.5rem;
     border-radius: 50px;
@@ -144,23 +154,21 @@ h4 {
 .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
-    background-color: #000;
+    background-color: var(--primary-hover);
     color: #fff;
-    /* Fix contrast: White text on Black background */
 }
 
-/* Featured Reservation Button */
+/* Featured Reservation Button - Clean Style */
 .nav-links .btn-primary {
-    background: linear-gradient(135deg, #d4af37 0%, #f3e5ab 100%) !important;
-    color: var(--primary) !important;
-    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: var(--primary) !important;
+    color: white !important;
+    box-shadow: var(--shadow-md) !important;
+    border: none !important;
 }
 
 .nav-links .btn-primary:hover {
-    background: linear-gradient(135deg, #f3e5ab 0%, #d4af37 100%) !important;
-    /* Slightly lighter/reversed gradient for hover */
-    color: var(--primary) !important;
+    background: var(--primary-hover) !important;
+    color: white !important;
 }
 
 .mobile-menu-btn {
@@ -259,14 +267,14 @@ h4 {
 .service-card:hover {
     transform: translateY(-5px);
     box-shadow: var(--shadow-md);
-    border-color: var(--accent);
+    border-color: var(--primary-light);
 }
 
 .service-icon {
     width: 48px;
     height: 48px;
-    background: var(--accent);
-    color: var(--primary-dark);
+    background: var(--primary-light);
+    color: var(--primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -369,9 +377,10 @@ h4 {
 }
 
 .admin-table th {
-    background: var(--accent);
-    color: var(--secondary);
+    background: var(--surface);
+    color: var(--text-main);
     font-weight: 600;
+    border-bottom: 2px solid var(--primary-light);
 }
 
 /* Utilities */
@@ -457,7 +466,7 @@ h4 {
 
 /* Service Detail (ENH-02) */
 .detail-header {
-    background: var(--secondary);
+    background: var(--primary);
     color: white;
     padding: 4rem 0;
     margin-bottom: 2rem;
@@ -822,9 +831,9 @@ h4 {
 .loader {
     width: 40px;
     height: 40px;
-    border: 3px solid rgba(212, 175, 55, 0.3);
+    border: 3px solid var(--primary-light);
     border-radius: 50%;
-    border-top-color: var(--secondary);
+    border-top-color: var(--primary);
     animation: spin 1s ease-in-out infinite;
 }
 
@@ -838,10 +847,10 @@ h4 {
 :root {
     --sidebar-width: 260px;
     --sidebar-collapsed-width: 80px;
-    --sidebar-bg: #1a1a1a;
-    --sidebar-text: #ffffff;
-    --sidebar-accent: #d4af37;
-    --sidebar-hover: #333333;
+    --sidebar-bg: #FFFFFF;
+    --sidebar-text: #1E293B;
+    --sidebar-accent: #00A8E8;
+    --sidebar-hover: #E0F2FE;
     --transition-speed: 0.3s;
 }
 
@@ -953,7 +962,7 @@ body.admin-mode .navbar {
 }
 
 .sidebar-link.active {
-    background: rgba(212, 175, 55, 0.1);
+    background: var(--sidebar-hover);
     color: var(--sidebar-accent);
     border-left-color: var(--sidebar-accent);
 }
@@ -1032,6 +1041,7 @@ body.admin-mode .navbar {
     display: flex;
     justify-content: center;
 }
+
 /* Sidebar Recovery */
 :root {
     --sidebar-width: 260px;
@@ -1045,13 +1055,14 @@ body.admin-mode .navbar {
     left: 0;
     height: 100vh;
     width: var(--sidebar-width);
-    background: var(--primary);
-    color: white;
+    background: var(--bg-white);
+    color: var(--text);
     z-index: 1001;
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
-    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+    border-right: 1px solid var(--border);
 }
 
 #sidebar.collapsed {
@@ -1064,7 +1075,7 @@ body.admin-mode .navbar {
     align-items: center;
     justify-content: space-between;
     padding: 0 1.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 #sidebar.collapsed .sidebar-header {
@@ -1075,7 +1086,7 @@ body.admin-mode .navbar {
 #sidebar .logo-text {
     font-family: var(--font-heading);
     font-size: 1.5rem;
-    color: var(--secondary);
+    color: var(--primary);
     white-space: nowrap;
     overflow: hidden;
 }
@@ -1094,7 +1105,7 @@ body.admin-mode .navbar {
     display: flex;
     align-items: center;
     padding: 0.75rem 1rem;
-    color: rgba(255,255,255,0.7);
+    color: var(--text-light);
     text-decoration: none;
     border-radius: 8px;
     margin-bottom: 0.5rem;
@@ -1104,9 +1115,10 @@ body.admin-mode .navbar {
     overflow: hidden;
 }
 
-.sidebar-nav-item:hover, .sidebar-nav-item.active {
-    background: rgba(255,255,255,0.1);
-    color: var(--secondary);
+.sidebar-nav-item:hover,
+.sidebar-nav-item.active {
+    background: var(--primary-light);
+    color: var(--primary);
 }
 
 .sidebar-nav-item i {
@@ -1129,7 +1141,7 @@ body.admin-mode .navbar {
 
 .sidebar-footer {
     padding: 1.5rem;
-    border-top: 1px solid rgba(255,255,255,0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 #sidebar.collapsed .sidebar-footer {
@@ -1140,7 +1152,7 @@ body.admin-mode .navbar {
 .collapse-btn {
     background: none;
     border: none;
-    color: rgba(255,255,255,0.5);
+    color: var(--text-light);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1148,7 +1160,7 @@ body.admin-mode .navbar {
 }
 
 .collapse-btn:hover {
-    color: white;
+    color: var(--primary);
 }
 
 /* Auth Layout Adjustment */
@@ -1165,4 +1177,3 @@ body.with-sidebar.sidebar-collapsed {
 body.with-sidebar .navbar {
     display: none;
 }
-
