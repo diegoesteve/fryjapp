@@ -20,6 +20,7 @@
         // UI Filters
         adminFilters: { professionalId: '', status: '', month: '' },
         reportFilters: { startDate: '', endDate: '', professionalId: '' },
+        serviceFilters: { status: '', category: '', professionalId: '' },
         agendaView: { viewMode: 'month', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: new Date() },
         visibleServicesCount: 4,
         isLoading: false
@@ -128,7 +129,10 @@
 
         navigate(view, params = null, pushState = true) {
             // Auth Guards
-            if (view === 'admin' && (!state.currentUser || state.currentUser.role !== 'admin')) {
+            if (view === 'admin' && (!state.currentUser || state.currentUser.role !== 'admin' && state.currentUser.role !== 'professional')) {
+                return this.navigate('login');
+            }
+            if (view === 'dashboard' && (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'professional'))) {
                 return this.navigate('login');
             }
             if (view === 'my-bookings' && !state.currentUser) {
@@ -154,6 +158,9 @@
             switch (view) {
                 case 'home':
                     this.renderHome();
+                    break;
+                case 'dashboard':
+                    this.renderDashboard();
                     break;
                 case 'services':
                     this.renderServices();
@@ -194,6 +201,9 @@
                 case 'services-management': // New case for service management
                     this.renderServicesManagement();
                     break;
+                case 'professionals-management':
+                    this.renderProfessionalsManagement();
+                    break;
                 default:
                     this.renderHome();
             }
@@ -228,7 +238,7 @@
                 if (serviceId) this.selectedService = serviceId;
                 if (professionalId) this.selectedProfessional = professionalId;
             } else {
-                this.navigate('home');
+                this.navigate('dashboard');
             }
             this.updateNav();
         },
@@ -303,10 +313,11 @@
             if (isCollapsed) document.body.classList.add('sidebar-collapsed');
 
             const menuItems = [
-                { id: 'home', icon: 'layout-dashboard', label: 'Panel Principal', role: ['admin', 'professional'] },
-                { id: 'calendar', icon: 'calendar', label: 'Agenda', role: ['admin', 'professional'] },
+                { id: 'dashboard', icon: 'layout-dashboard', label: 'Resumen', role: ['admin', 'professional'] },
+                { id: 'admin', icon: 'calendar', label: 'Agenda', role: ['admin', 'professional'] },
                 { id: 'patients', icon: 'users', label: 'Pacientes', role: ['admin', 'professional'] },
                 { id: 'services-management', icon: 'sparkles', label: 'Servicios', role: ['admin'] },
+                { id: 'professionals-management', icon: 'users-round', label: 'Profesionales', role: ['admin'] },
                 { id: 'reports', icon: 'bar-chart-3', label: 'Reportes', role: ['admin'] },
                 { id: 'settings', icon: 'settings', label: 'Configuración', role: ['admin'] }
             ];
@@ -321,8 +332,8 @@
                     </div>
                     <nav class="sidebar-nav">
                         ${menuItems.filter(item => item.role.includes(state.currentUser.role)).map(item => `
-                            <div class="sidebar-nav-item ${state.currentView === item.id || (state.currentView === 'admin' && item.id === 'home') || (state.currentView === 'my-bookings' && item.id === 'home') ? 'active' : ''}" 
-                                 onclick="turnoApp.navigate('${item.id === 'home' && state.currentUser.role === 'admin' ? 'admin' : item.id === 'home' ? 'my-bookings' : item.id}')">
+                            <div class="sidebar-nav-item ${state.currentView === item.id ? 'active' : ''}" 
+                                 onclick="turnoApp.navigate('${item.id}')">
                                 <i data-lucide="${item.icon}"></i>
                                 <span>${item.label}</span>
                             </div>
@@ -1258,7 +1269,26 @@
         // ENH-Services: Service Management
         renderServicesManagement() {
             const main = document.getElementById('main-content');
-            const services = state.services;
+            let services = state.services;
+            const { status, category, professionalId } = state.serviceFilters;
+
+            // 1. Apply Filters
+            if (status) {
+                if (status === 'active') services = services.filter(s => s.active);
+                else if (status === 'inactive') services = services.filter(s => !s.active);
+            }
+            if (category) {
+                services = services.filter(s => s.category === category);
+            }
+            if (professionalId) {
+                const prof = state.professionals.find(p => p.id === parseInt(professionalId));
+                if (prof) {
+                    services = services.filter(s => prof.serviceIds.includes(s.id));
+                }
+            }
+
+            // 2. Prepare Dropdown Data
+            const categories = [...new Set(state.services.map(s => s.category))];
 
             main.innerHTML = `
     <section class="section">
@@ -1268,9 +1298,39 @@
                 <p>Configura los servicios ofrecidos y profesionales asignados</p>
             </div>
             
-            <div class="mb-4" style="display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto 1.5rem;">
+            <div class="mb-4" style="display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 1.5rem;">
                 <button onclick="turnoApp.navigate('admin')" class="btn-secondary">← Volver al Panel</button>
+                <div style="flex-grow: 1;"></div>
                 <button onclick="turnoApp.openServiceModal()" class="btn-primary">+ Nuevo Servicio</button>
+            </div>
+
+            <!-- Service Filters -->
+            <div class="filters-bar" style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; border: 1px solid #e2e8f0;">
+                <div style="flex: 1; min-width: 150px;">
+                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Estado</label>
+                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.status = this.value; turnoApp.renderServicesManagement()">
+                        <option value="">Todos</option>
+                        <option value="active" ${status === 'active' ? 'selected' : ''}>Activos</option>
+                        <option value="inactive" ${status === 'inactive' ? 'selected' : ''}>Inactivos</option>
+                    </select>
+                </div>
+                 <div style="flex: 1; min-width: 150px;">
+                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Categoría</label>
+                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.category = this.value; turnoApp.renderServicesManagement()">
+                        <option value="">Todas</option>
+                        ${categories.map(cat => `<option value="${cat}" ${category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
+                    </select>
+                </div>
+                <div style="flex: 1; min-width: 150px;">
+                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Profesional Asignado</label>
+                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.professionalId = this.value; turnoApp.renderServicesManagement()">
+                        <option value="">Todos</option>
+                        ${state.professionals.map(p => `<option value="${p.id}" ${professionalId == p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                    </select>
+                </div>
+                 <button onclick="state.serviceFilters = { status: '', category: '', professionalId: '' }; turnoApp.renderServicesManagement()" class="btn-secondary" style="height: 38px; margin-top: 18px;">
+                     Limpiar
+                </button>
             </div>
 
             <div style="overflow-x: auto;">
@@ -1287,7 +1347,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${services.map(s => {
+                        ${services.length > 0 ? services.map(s => {
                 // Find professionals who have this service ID
                 const assignedProfs = state.professionals.filter(p => p.serviceIds.includes(s.id));
                 const profNames = assignedProfs.map(p => p.name).join(', ') || '<span style="color:#999;font-style:italic">Ninguno</span>';
@@ -1309,6 +1369,73 @@
                                     <button onclick="turnoApp.deleteService(${s.id})" style="background:none; border:none; cursor:pointer; font-size:1.1rem; color: #dc3545;" title="${s.active ? 'Desactivar' : 'Reactivar'}">${s.active ? '🗑️' : '♻️'}</button>
                                 </td>
                             </tr>
+                        `}).join('') : `<tr><td colspan="7" class="text-center">No se encontraron servicios con estos filtros.</td></tr>`}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    `;
+        },
+
+        // ENH-Professionals: Professional Management
+        renderProfessionalsManagement() {
+            const main = document.getElementById('main-content');
+            const professionals = state.professionals;
+
+            main.innerHTML = `
+    <section class="section">
+        <div class="container">
+            <div class="section-header">
+                <h2>Gestión de Profesionales</h2>
+                <p>Administra el equipo, sus perfiles y disponibilidad horaria</p>
+            </div>
+            
+            <div class="mb-4" style="display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 1.5rem;">
+                <button onclick="turnoApp.navigate('admin')" class="btn-secondary">← Volver al Panel</button>
+                <div style="flex-grow: 1;"></div>
+                <button onclick="turnoApp.showProfessionalModal()" class="btn-primary">+ Nuevo Profesional</button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Especialidad</th>
+                            <th>Servicios Asignados</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${professionals.map(p => {
+                // Calculate services count
+                const serviceCount = p.serviceIds ? p.serviceIds.length : 0;
+                const isActive = p.active !== false; // Default to true if undefined for compatibility
+
+                return `
+                            <tr style="${!isActive ? 'opacity: 0.6; background: #f9f9f9;' : ''}">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <div style="width: 32px; height: 32px; background: #eee; border-radius: 50%; overflow: hidden;">
+                                            ${p.image ? `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;">` : `<i data-lucide="user" style="padding:6px; color:#ccc;"></i>`}
+                                        </div>
+                                        <strong>${p.name}</strong>
+                                    </div>
+                                </td>
+                                <td>${p.specialty || '-'}</td>
+                                <td>${serviceCount} servicios</td>
+                                <td>
+                                    <span class="status-badge ${isActive ? 'completado' : 'cancelado'}">
+                                        ${isActive ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button onclick="turnoApp.showProfessionalModal(${p.id})" style="background:none; border:none; cursor:pointer; font-size:1.1rem; margin-right:0.5rem;" title="Editar">✏️</button>
+                                    <button onclick="turnoApp.toggleProfessionalStatus(${p.id})" style="background:none; border:none; cursor:pointer; font-size:1.1rem;" title="${isActive ? 'Desactivar' : 'Reactivar'}">${isActive ? '🛑' : '✅'}</button>
+                                </td>
+                            </tr>
                         `}).join('')}
                     </tbody>
                 </table>
@@ -1316,6 +1443,173 @@
         </div>
     </section>
     `;
+            this.updateIcons();
+        },
+
+        showProfessionalModal(profId = null) {
+            const prof = profId ? state.professionals.find(p => p.id === profId) : null;
+            const isEdit = !!prof;
+
+            // Mock default availability if missing
+            const availability = (prof && prof.availability) ? prof.availability : {
+                schedule: {
+                    'Mon': ['09:00-18:00'],
+                    'Tue': ['09:00-18:00'],
+                    'Wed': ['09:00-18:00'],
+                    'Thu': ['09:00-18:00'],
+                    'Fri': ['09:00-18:00']
+                },
+                blockouts: []
+            };
+
+            const content = `
+                <div class="modal-header">
+                    <h3>${isEdit ? 'Editar Profesional' : 'Nuevo Profesional'}</h3>
+                </div>
+                
+                <!-- Tabs -->
+                <div style="display: flex; gap: 1rem; border-bottom: 2px solid #e2e8f0; margin-bottom: 1.5rem;">
+                    <button class="tab-btn active" onclick="turnoApp.switchModalTab('general')" id="tab-btn-general">General</button>
+                    <button class="tab-btn" onclick="turnoApp.switchModalTab('availability')" id="tab-btn-availability">Disponibilidad</button>
+                </div>
+
+                <form onsubmit="turnoApp.saveProfessional(event, ${profId})">
+                    <!-- General Tab -->
+                    <div id="modal-tab-general" class="modal-tab-content">
+                        <div class="form-group">
+                            <label class="form-label">Nombre Completo</label>
+                            <input type="text" name="name" class="form-input" required value="${prof ? prof.name : ''}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Especialidad</label>
+                            <input type="text" name="specialty" class="form-input" value="${prof ? prof.specialty : ''}" placeholder="Ej: Facialista, Masajista...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Biografía</label>
+                            <textarea name="bio" class="form-input" rows="3">${prof && prof.bio ? prof.bio : ''}</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">URL Imagen de Perfil</label>
+                            <input type="text" name="image" class="form-input" value="${prof ? prof.image : ''}" placeholder="https://...">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Servicios Asignados</label>
+                            <div style="max-height: 150px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 0.5rem; border-radius: 6px;">
+                                ${state.services.map(s => `
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                                        <input type="checkbox" name="services" value="${s.id}" ${prof && prof.serviceIds && prof.serviceIds.includes(s.id) ? 'checked' : ''}>
+                                        <span style="font-size: 0.9rem;">${s.name} (${s.category})</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Availability Tab -->
+                    <div id="modal-tab-availability" class="modal-tab-content" style="display: none;">
+                        <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">Configura los días y horarios de atención habituales. Formato: HH:MM-HH:MM. Separa múltiples rangos con coma.</p>
+                        
+                        ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
+                const dayMap = { 'Mon': 'Lunes', 'Tue': 'Martes', 'Wed': 'Miércoles', 'Thu': 'Jueves', 'Fri': 'Viernes', 'Sat': 'Sábado', 'Sun': 'Domingo' };
+                const ranges = availability.schedule[day] ? availability.schedule[day].join(', ') : '';
+                return `
+                                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                                    <div style="width: 80px; font-weight: 500;">${dayMap[day]}</div>
+                                    <input type="text" name="schedule_${day}" class="form-input" style="flex: 1;" value="${ranges}" placeholder="Ej: 09:00-13:00, 14:00-18:00 (Vacío = No atiende)">
+                                </div>
+                            `;
+            }).join('')}
+
+                        <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid #e2e8f0;">
+                        
+                        <h4 style="margin-bottom: 0.5rem;">Días Bloqueados / Vacaciones</h4>
+                        <div class="form-group">
+                            <label class="form-label">Fechas (YYYY-MM-DD, separadas por coma)</label>
+                            <input type="text" name="blockouts" class="form-input" value="${availability.blockouts.join(', ')}" placeholder="Ej: 2024-12-25, 2025-01-01">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary" style="margin-right: 0.5rem;">Cancelar</button>
+                        <button type="submit" class="btn-primary">Guardar Profesional</button>
+                    </div>
+                </form>
+            `;
+            this.openModal(content);
+        },
+
+        switchModalTab(tabId) {
+            document.querySelectorAll('.modal-tab-content').forEach(el => el.style.display = 'none');
+            document.getElementById(`modal-tab-${tabId}`).style.display = 'block';
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-btn-${tabId}`).classList.add('active');
+        },
+
+        toggleProfessionalStatus(id) {
+            const p = state.professionals.find(prof => prof.id === id);
+            if (p) {
+                p.active = p.active !== false ? false : true;
+                this.renderProfessionalsManagement();
+                // Persist logic would go here
+            }
+        },
+
+        saveProfessional(e, id) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+
+            // Gather General Data
+            const name = formData.get('name');
+            const specialty = formData.get('specialty');
+            const bio = formData.get('bio');
+            const image = formData.get('image');
+
+            // Gather Services
+            const serviceCheckboxes = form.querySelectorAll('input[name="services"]:checked');
+            const serviceIds = Array.from(serviceCheckboxes).map(cb => parseInt(cb.value));
+
+            // Gather Schedule
+            const schedule = {};
+            ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
+                const val = formData.get(`schedule_${day}`);
+                if (val && val.trim() !== '') {
+                    schedule[day] = val.split(',').map(s => s.trim());
+                }
+            });
+
+            // Gather Blockouts
+            const blockoutsStr = formData.get('blockouts');
+            const blockouts = blockoutsStr ? blockoutsStr.split(',').map(s => s.trim()) : [];
+
+            if (id) {
+                // Update
+                const p = state.professionals.find(prof => prof.id === id);
+                p.name = name;
+                p.specialty = specialty;
+                p.bio = bio;
+                p.image = image;
+                p.serviceIds = serviceIds;
+                p.availability = { schedule, blockouts };
+            } else {
+                // Create
+                const newId = Date.now();
+                state.professionals.push({
+                    id: newId,
+                    name,
+                    specialty,
+                    bio,
+                    image,
+                    serviceIds,
+                    active: true,
+                    availability: { schedule, blockouts }
+                });
+            }
+
+            this.closeModal();
+            this.showNotification('Profesional guardado correctamente');
+            this.renderProfessionalsManagement();
         },
 
         openServiceModal(serviceId = null) {
@@ -2004,9 +2298,450 @@
             this.renderAdmin();
         },
 
+        getAdminWeekHTML() {
+            const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
+            const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
+            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
+            const startOfWeek = new Date(currentDate.setDate(diff));
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+            const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+            const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+            let weekGrid = `<div class="week-view-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; overflow-x: auto;">`;
+
+            for (let i = 0; i < 7; i++) {
+                const dayDate = new Date(startOfWeek);
+                dayDate.setDate(startOfWeek.getDate() + i);
+                const dateStr = dayDate.toISOString().split('T')[0];
+                const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
+                const dayNum = dayDate.getDate();
+                const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                const isSelected = state.agendaView.selectedDay && new Date(state.agendaView.selectedDay).toISOString().split('T')[0] === dateStr;
+
+                // Filter by professional if selected
+                const dayBookings = state.bookings.filter(b =>
+                    b.date === dateStr &&
+                    b.status !== 'Cancelado' &&
+                    (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
+                );
+
+                weekGrid += `
+                        <div class="week-day-column ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" 
+                             style="min-width: 100px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem; background: ${isToday ? '#f0f9ff' : 'white'}; position: relative;">
+                             <button onclick="turnoApp.showAdminBookingModal('${dateStr}')" style="position: absolute; top: 4px; right: 4px; background: none; border: none; font-size: 1.1rem; line-height: 1; color: var(--primary); cursor: pointer; padding: 0; opacity: 0.6;" title="Nuevo Turno">+</button>
+                            <div onclick="turnoApp.changeWeekDay('${dateStr}')" style="cursor: pointer;">
+                                <div style="font-weight: 600; text-align: center; margin-bottom: 0.5rem; color: #64748b; text-transform: capitalize;">${dayName} ${dayNum}</div>
+                                <div class="day-bookings-list" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                    ${dayBookings.length > 0 ? dayBookings.map(b => `
+                                        <div style="background: ${this.getServiceColor(b.serviceId)}; color: white; padding: 4px 6px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${b.time} - ${b.clientName}">
+                                            ${b.time} ${b.clientName.split(' ')[0]}
+                                        </div>
+                                    `).join('') : '<div style="color: #cbd5e1; text-align: center; font-size: 1.5rem;">·</div>'}
+                                </div>
+                            </div>
+                        </div>`;
+            }
+            weekGrid += `</div>`;
+
+            return `
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                             <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">←</button>
+                             <h3>Semana ${startStr} - ${endStr}</h3>
+                             <button onclick="turnoApp.changeWeek(1)" class="btn-icon">→</button>
+                        </div>
+                        ${weekGrid}
+                    </div>`;
+        },
+
+        changeWeek(direction) {
+            const current = new Date(state.agendaView.selectedDay || new Date());
+            current.setDate(current.getDate() + (direction * 7));
+            state.agendaView.selectedDay = current;
+            state.agendaView.calendarMonth = current.getMonth();
+            state.agendaView.calendarYear = current.getFullYear();
+            this.renderAdmin();
+        },
+
+        // Helper to select a day from week view and optionally switch to day view?
+        // For now just updates selection
+        changeWeekDay(dateStr) {
+            state.agendaView.selectedDay = new Date(dateStr);
+            this.renderAdmin();
+        },
+
+        getAdminDayHTML() {
+            const dateStr = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+            const dateObj = new Date(dateStr + 'T12:00:00');
+            const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+            const profFilterId = state.adminFilters.professionalId;
+
+            const dayBookings = state.bookings
+                .filter(b => b.date === dateStr && b.status !== 'Cancelado' && (!profFilterId || b.professionalId == profFilterId))
+                .sort((a, b) => a.time.localeCompare(b.time));
+
+            let dayGrid = '';
+
+            // 1. General View (List Mode) if no professional selected
+            // Or Timeline View? Let's do Timeline if Professional Selected, List if All
+
+            if (!profFilterId) {
+                // List View (All Professionals)
+                dayGrid += `<div class="day-view-container" style="display: flex; flex-direction: column; gap: 0.75rem;">`;
+                if (dayBookings.length === 0) {
+                    dayGrid += `<div style="padding: 3rem; text-align: center; color: #94a3b8; background: #f8fafc; border-radius: 8px;">No hay turnos para este día.</div>`;
+                } else {
+                    dayGrid += dayBookings.map(b => `
+                                <div style="display: flex; gap: 1rem; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; align-items: center; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                                    <div style="font-weight: 700; font-size: 1.1rem; width: 60px; color: var(--primary); text-align:center;">${b.time}</div>
+                                    <div style="width: 4px; height: 40px; background: ${this.getServiceColor(b.serviceId)}; border-radius: 2px;"></div>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; color: #1e293b;">${b.clientName}</div>
+                                        <div style="font-size: 0.9rem; color: #64748b;">${b.serviceName} con <strong>${b.professionalName}</strong></div>
+                                    </div>
+                                    <div>
+                                         <span class="status-badge ${b.status.toLowerCase()}">${b.status}</span>
+                                    </div>
+                                    <div>
+                                         <button onclick="turnoApp.editBooking(${b.id})" class="btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;">Ver</button>
+                                    </div>
+                                </div>
+                             `).join('');
+                }
+                dayGrid += `</div>`;
+            } else {
+                // Timeline View (Specific Professional)
+                dayGrid += `<div class="timeline-container" style="display: grid; gap: 1px; background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">`;
+
+                // Determine Availability
+                const prof = state.professionals.find(p => p.id == profFilterId);
+                let startHour = 9;
+                let endHour = 19;
+                let isCountDay = true; // Assume working day unless blocked
+
+                if (prof && prof.availability) {
+                    // Check Blockouts
+                    if (prof.availability.blockouts && prof.availability.blockouts.includes(dateStr)) {
+                        dayGrid += `<div style="padding: 2rem; text-align: center; background: #fff1f2; color: #be123c;">
+                            Profesional no disponible en esta fecha (Día Bloqueado/Vacaciones).
+                        </div>`;
+                        isCountDay = false;
+                    } else {
+                        // Check Schedule for this day of week
+                        const dayName = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' }); // Mon, Tue...
+                        const schedule = prof.availability.schedule[dayName];
+
+                        if (!schedule || schedule.length === 0) {
+                            dayGrid += `<div style="padding: 2rem; text-align: center; background: #fff1f2; color: #be123c;">
+                                Profesional no atiende los ${prettyDate.split(' ')[0]}s.
+                            </div>`;
+                            isCountDay = false;
+                        } else {
+                            // Parse start/end from schedule (simplified: take min start and max end of ranges)
+                            // Example format: "09:00-13:00"
+                            const times = schedule.map(s => s.split('-')).flat();
+                            // If complex ranges, we might just iterate standard main block or all.
+                            // For this UI loop, let's find min/max to render the grid
+                            const hours = times.map(t => parseInt(t.split(':')[0]));
+                            startHour = Math.min(...hours);
+                            endHour = Math.max(...hours) - 1; // Loop goes <= endHour? No, loop renders slot starting at h. So if ends 17:00, last slot is 16:00.
+                            // If schedule is 09:00-17:00. endHour should be 16 to render 16:00 slot?
+                            // Logic below uses h <= endHour.
+                            // If range is 09:00-17:00. We want slots 9,10,11,12,13,14,15,16.
+                            // So max hour is 17. We want loop to run until 16.
+
+                            // Let's just fix render to 8-20 range but mark unavailable? 
+                            // Or dynamic:
+                            endHour = Math.max(...hours);
+                            // If exact match logic is needed inside loop:
+                        }
+                    }
+                }
+
+                if (isCountDay) {
+                    for (let h = startHour; h < endHour; h++) {
+                        const timeSlot = `${h.toString().padStart(2, '0')}:00`;
+                        const booking = dayBookings.find(b => b.time.startsWith(timeSlot.split(':')[0])); // Simple match hour
+
+                        // Check specific range availability (e.g. lunch break)
+                        let isWorkingHour = true;
+                        if (prof && prof.availability) {
+                            const dayName = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' });
+                            const schedule = prof.availability.schedule[dayName];
+                            if (schedule) {
+                                // Check if current h is inside any range
+                                // Range "09:00-13:00". 09, 10, 11, 12 are valid. 13 is not (end time).
+                                isWorkingHour = schedule.some(range => {
+                                    const [start, end] = range.split('-');
+                                    const sH = parseInt(start.split(':')[0]);
+                                    const eH = parseInt(end.split(':')[0]);
+                                    return h >= sH && h < eH;
+                                });
+                            }
+                        }
+
+                        if (booking) {
+                            dayGrid += `
+                                <div onclick="turnoApp.editBooking(${booking.id})" style="background: white; padding: 1rem; display: flex; gap: 1rem; align-items: center; border-left: 4px solid ${this.getServiceColor(booking.serviceId)}; cursor: pointer;">
+                                    <div style="width: 60px; font-weight: 600; color: #64748b;">${timeSlot}</div>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600;">${booking.clientName}</div>
+                                        <div style="font-size: 0.85rem; color: #64748b;">${booking.serviceName}</div>
+                                    </div>
+                                    <span class="status-badge ${booking.status.toLowerCase()}">${booking.status}</span>
+                                </div>
+                            `;
+                        } else if (!isWorkingHour) {
+                            dayGrid += `
+                                <div style="background: #f8fafc; padding: 1rem; display: flex; gap: 1rem; align-items: center; opacity: 0.7;">
+                                    <div style="width: 60px; font-weight: 600; color: #cbd5e1;">${timeSlot}</div>
+                                    <div style="font-style: italic; color: #cbd5e1;">No disponible / Descanso</div>
+                                </div>
+                            `;
+                        } else {
+                            // Free Slot
+                            dayGrid += `
+                                <div onclick="turnoApp.showAdminBookingModal('${dateStr}', '${timeSlot}', '${profFilterId}')" style="background: white; padding: 1rem; display: flex; gap: 1rem; align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f0fdf4'; this.querySelector('.add-text').style.opacity='1';" onmouseout="this.style.background='white'; this.querySelector('.add-text').style.opacity='0';">
+                                    <div style="width: 60px; font-weight: 600; color: #64748b;">${timeSlot}</div>
+                                    <div style="color: #10b981; font-size: 0.9rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; flex: 1;">
+                                        <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                                        Disponible
+                                        <span class="add-text" style="margin-left: auto; color: #10b981; opacity: 0; font-weight: 600; transition: opacity 0.2s;">+ Agendar</span>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+                dayGrid += `</div>`;
+            }
+
+            return `
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                             <button onclick="turnoApp.changeDay(-1)" class="btn-icon">←</button>
+                             <h3 style="text-transform: capitalize;">${prettyDate}</h3>
+                             <button onclick="turnoApp.changeDay(1)" class="btn-icon">→</button>
+                        </div>
+                        
+                        ${!profFilterId ?
+                    `<div style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; color: #0369a1; font-size: 0.9rem;">
+                            💡 Selecciona un profesional en los filtros de arriba para ver la disponibilidad horaria detallada (Timeline).
+                         </div>` : ''}
+
+                        ${dayGrid}
+                    </div>`;
+        },
+
+        changeDay(direction) {
+            const current = new Date(state.agendaView.selectedDay || new Date());
+            current.setDate(current.getDate() + direction);
+            state.agendaView.selectedDay = current;
+            state.agendaView.calendarMonth = current.getMonth();
+            state.agendaView.calendarYear = current.getFullYear();
+            this.renderAdmin();
+        },
+
+        getServiceColor(serviceId) {
+            const colors = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+            return colors[serviceId % colors.length] || '#64748b';
+        },
+
+
+
+        renderDashboard() {
+            const main = document.getElementById('main-content');
+            const user = state.currentUser;
+            const isProf = user.role === 'professional';
+
+            // Calculation for KPIs
+            const today = new Date().toISOString().split('T')[0];
+            const currentMonth = today.slice(0, 7);
+
+            // 1. Turnos de Hoy
+            const todaysBookings = state.bookings.filter(b => b.date === today && b.status !== 'Cancelado' && (!isProf || b.professionalId == user.id));
+
+            // 2. Ingresos Mes
+            const monthVisits = state.visits.filter(v => v.date.startsWith(currentMonth) && (!isProf || v.professionalId == user.id));
+            const totalIncome = monthVisits.reduce((sum, v) => sum + (v.price || 0), 0);
+
+            // 3. Pacientes Activos
+            let activePatientsCount = 0;
+            if (isProf) {
+                const myClients = new Set(state.bookings.filter(b => b.professionalId == user.id).map(b => b.clientEmail));
+                activePatientsCount = myClients.size;
+            } else {
+                activePatientsCount = state.patients.length;
+            }
+
+            // 4. Pending Tasks (News)
+            const pendingBookings = state.bookings.filter(b => b.status === 'Pendiente' && (!isProf || b.professionalId == user.id))
+                .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+            main.innerHTML = `
+            <section class="section">
+                <div class="container">
+                    <div class="section-header">
+                        <h2>Dashboard</h2>
+                        <p>Bienvenido, ${user.name.split(' ')[0]}</p>
+                    </div>
+
+                    <!-- KPI Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem;">
+                        <div class="card" style="padding: 1.5rem; text-align: center;">
+                            <h3 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Turnos Hoy</h3>
+                            <div style="font-size: 2.5rem; font-weight: 700; color: var(--primary);">${todaysBookings.length}</div>
+                        </div>
+                        <div class="card" style="padding: 1.5rem; text-align: center;">
+                            <h3 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Ingresos Mes</h3>
+                            <div style="font-size: 2.5rem; font-weight: 700; color: #10b981;">$${totalIncome}</div>
+                        </div>
+                        <div class="card" style="padding: 1.5rem; text-align: center;">
+                            <h3 style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Pacientes ${isProf ? 'Míos' : 'Total'}</h3>
+                            <div style="font-size: 2.5rem; font-weight: 700; color: #64748b;">${activePatientsCount}</div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                        
+                        <!-- Col 1: Pending Tasks -->
+                        <div>
+                            <h3 style="font-size: 1.2rem; color: #334155; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i data-lucide="clipboard-list"></i> Tareas Pendientes
+                                ${pendingBookings.length > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.8rem; padding: 2px 8px; border-radius: 99px;">${pendingBookings.length}</span>` : ''}
+                            </h3>
+                            
+                            <div style="background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden;">
+                                ${pendingBookings.length > 0 ? pendingBookings.map(b => `
+                                    <div style="padding: 1rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-weight: 600; color: #334155;">${b.clientName}</div>
+                                            <div style="font-size: 0.85rem; color: #64748b;">${b.serviceName} • ${new Date(b.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} ${b.time}</div>
+                                            ${!isProf ? `<div style="font-size: 0.8rem; color: #94a3b8;">Prof: ${b.professionalName}</div>` : ''}
+                                        </div>
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button onclick="turnoApp.updateBookingStatus(${b.id}, 'Confirmado')" title="Confirmar" style="background: #dcfce7; color: #166534; border: none; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; display: grid; place-items: center;"><i data-lucide="check" size="16"></i></button>
+                                            <button onclick="turnoApp.updateBookingStatus(${b.id}, 'Cancelado')" title="Cancelar" style="background: #fee2e2; color: #991b1b; border: none; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; display: grid; place-items: center;"><i data-lucide="x" size="16"></i></button>
+                                        </div>
+                                    </div>
+                                `).join('') : `
+                                    <div style="padding: 2rem; text-align: center; color: #94a3b8;">
+                                        <i data-lucide="check-circle-2" size="32" style="margin-bottom: 0.5rem; opacity: 0.5;"></i>
+                                        <p>¡Todo al día! No hay turnos pendientes.</p>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Quick Access -->
+                        <div>
+                             <h3 style="font-size: 1.2rem; color: #334155; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i data-lucide="zap"></i> Accesos Rápidos
+                            </h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <button onclick="turnoApp.navigate('booking')" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
+                                    <div style="background: #e0f2fe; padding: 10px; border-radius: 50%; color: var(--primary);">
+                                        <i data-lucide="plus-circle" size="24"></i>
+                                    </div>
+                                    <span style="font-weight: 500; color: #334155;">Nuevo Turno</span>
+                                </button>
+                                <button onclick="turnoApp.showCreatePatientModal()" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
+                                    <div style="background: #f1f5f9; padding: 10px; border-radius: 50%; color: #64748b;">
+                                        <i data-lucide="user-plus" size="24"></i>
+                                    </div>
+                                    <span style="font-weight: 500; color: #334155;">Nuevo Paciente</span>
+                                </button>
+                                ${!isProf ? `
+                                <button onclick="turnoApp.navigate('reports')" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
+                                    <div style="background: #f0fdf4; padding: 10px; border-radius: 50%; color: #166534;">
+                                        <i data-lucide="bar-chart-3" size="24"></i>
+                                    </div>
+                                    <span style="font-weight: 500; color: #334155;">Ver Reportes</span>
+                                </button>
+                                <button onclick="turnoApp.navigate('admin')" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
+                                    <div style="background: #fff7ed; padding: 10px; border-radius: 50%; color: #c2410c;">
+                                        <i data-lucide="calendar" size="24"></i>
+                                    </div>
+                                    <span style="font-weight: 500; color: #334155;">Ir a Agenda</span>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+            `;
+
+            if (window.lucide) lucide.createIcons();
+        },
+
+        updateBookingStatus(id, newStatus) {
+            const booking = state.bookings.find(b => b.id === id);
+            if (booking) {
+                booking.status = newStatus;
+                // Update LocalStorage
+                localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
+
+                // If Completed, add to Visits logic? (Simplified: Handled in reports by filtering 'Completado')
+                if (newStatus === 'Completado') {
+                    // Check if visit already exists
+                    // For now, Report filtering handles it.
+                }
+
+                this.showNotification(`Turno ${newStatus.toLowerCase()} correctamente`);
+                this.renderDashboard(); // Refresh dashboard
+            }
+        },
+
         renderAdmin() {
+            const user = state.currentUser;
+            if (!user) return;
+
+            // SECURITY: If Professional, force filter to their ID
+            if (user.role === 'professional') {
+                state.adminFilters.professionalId = user.id;
+            }
+
             const main = document.getElementById('main-content');
             const viewMode = state.agendaView.viewMode || 'month';
+
+            // --- FILTER BAR (Dynamic based on role) ---
+            let filterBarHTML = `
+            <div class="admin-filters">
+                ${user.role === 'admin' ? `
+                <div class="filter-group">
+                    <label>Profesional</label>
+                    <select id="filter-prof" onchange="turnoApp.applyAdminFilters()">
+                        <option value="">Todos</option>
+                        ${state.professionals.map(p => `<option value="${p.id}" ${state.adminFilters.professionalId == p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                    </select>
+                </div>
+                ` : `
+                <div class="filter-group">
+                    <label>Profesional</label>
+                    <div style="padding: 0.5rem; background: #e2e8f0; border-radius: 4px; color: #64748b; font-size: 0.9rem;">
+                        ${state.professionals.find(p => p.id === user.id)?.name || 'Tú'}
+                        <input type="hidden" id="filter-prof" value="${user.id}">
+                    </div>
+                </div>
+                `}
+                
+                <div class="filter-group">
+                    <label>Estado</label>
+                     <select id="filter-status" onchange="turnoApp.applyAdminFilters()">
+                        <option value="">Todos</option>
+                        <option value="Pendiente" ${state.adminFilters.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                        <option value="Confirmado" ${state.adminFilters.status === 'Confirmado' ? 'selected' : ''}>Confirmado</option>
+                        <option value="Completado" ${state.adminFilters.status === 'Completado' ? 'selected' : ''}>Completado</option>
+                        <option value="Cancelado" ${state.adminFilters.status === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+                    </select>
+                </div>
+            </div>
+            `;
 
             let calendarHTML = '';
             if (viewMode === 'month') {
@@ -2021,18 +2756,17 @@
             <section class="section">
                 <div class="container">
                     <div class="section-header">
-                        <h2>Agenda Admin</h2>
+                        <h2>Agenda ${user.role === 'admin' ? 'Global' : 'Personal'}</h2>
                         <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                              <div class="view-toggle">
                                 <button onclick="turnoApp.setAdminViewMode('month')" class="${viewMode === 'month' ? 'active' : ''}">Mes</button>
                                 <button onclick="turnoApp.setAdminViewMode('week')" class="${viewMode === 'week' ? 'active' : ''}">Semana</button>
                                 <button onclick="turnoApp.setAdminViewMode('day')" class="${viewMode === 'day' ? 'active' : ''}">Día</button>
                              </div>
-                             <button onclick="turnoApp.navigate('reports')" class="btn-secondary">Reportes</button>
-                             <button onclick="turnoApp.navigate('patients')" class="btn-secondary">Pacientes</button>
-                             <button onclick="turnoApp.navigate('services-management')" class="btn-secondary">Gestión Servicios</button>
                         </div>
                     </div>
+
+                    ${filterBarHTML}
 
                     ${calendarHTML}
                 </div>
@@ -2202,15 +2936,18 @@
                 const isToday = new Date().toISOString().split('T')[0] === dateStr;
 
                 calendarGrid += `
-                <div class="calendar-day ${isToday ? 'today' : ''}" onclick="turnoApp.showDayDetails('${dateStr}')">
-                    <div class="day-number">${d}</div>
-                    ${dayBookings.length > 0 ? `
-                        <div class="day-indicators">
-                            ${dayBookings.slice(0, 3).map(b => `<span class="dot" title="${b.time} - ${b.serviceName}"></span>`).join('')}
-                            ${dayBookings.length > 3 ? '<span class="dot plus">+</span>' : ''}
-                        </div>
-                        <div class="day-count">${dayBookings.length} turnos</div>
-                    ` : ''}
+                <div class="calendar-day ${isToday ? 'today' : ''}" style="position: relative;">
+                    <button onclick="turnoApp.showAdminBookingModal('${dateStr}')" style="position: absolute; top: 4px; right: 4px; background: none; border: none; font-size: 1.2rem; line-height: 1; color: var(--primary); cursor: pointer; padding: 0; opacity: 0.6; z-index: 2;" title="Nuevo Turno">+</button>
+                    <div class="day-content" onclick="turnoApp.showDayDetails('${dateStr}')" style="height: 100%;">
+                        <div class="day-number">${d}</div>
+                        ${dayBookings.length > 0 ? `
+                            <div class="day-indicators">
+                                ${dayBookings.slice(0, 3).map(b => `<span class="dot" title="${b.time} - ${b.serviceName}"></span>`).join('')}
+                                ${dayBookings.length > 3 ? '<span class="dot plus">+</span>' : ''}
+                            </div>
+                            <div class="day-count">${dayBookings.length} turnos</div>
+                        ` : ''}
+                    </div>
                 </div>
             `;
             }
@@ -2240,12 +2977,15 @@
             <h3>Turnos del ${dateStr}</h3>
             <div style="margin-top: 1rem; max-height: 400px; overflow-y: auto;">
                 ${bookings.map(b => `
-                    <div style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                    <div onclick="turnoApp.editBooking(${b.id})" style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
                         <div>
                             <strong>${b.time}</strong> - ${b.clientName}<br>
                             <span style="font-size: 0.9rem; color: #666;">${b.serviceName} con ${b.professionalName}</span>
                         </div>
-                        <span class="status-badge ${b.status.toLowerCase()}" style="font-size: 0.75rem;">${b.status}</span>
+                        <div style="text-align: right;">
+                             <span class="status-badge ${b.status.toLowerCase()}" style="font-size: 0.75rem;">${b.status}</span>
+                             <div style="font-size: 0.75rem; color: var(--primary); margin-top: 4px;">Editar</div>
+                        </div>
                     </div>
                 `).join('')}
             </div>
@@ -2254,6 +2994,125 @@
             </div>
         `;
             this.openModal(content);
+        },
+
+        showAdminBookingModal(defaultDate = '', defaultTime = '', defaultProfId = '') {
+            // Ensure data availability
+            const patientsList = state.patients.map(p => `<option value="${p.email}">${p.name} (${p.email})</option>`).join('');
+            const servicesList = state.services.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - $${s.price}</option>`).join('');
+            const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == defaultProfId ? 'selected' : ''}>${p.name}</option>`).join('');
+
+            const content = `
+                <div class="modal-header">
+                    <h3>Nuevo Turno</h3>
+                </div>
+                <form onsubmit="turnoApp.confirmAdminBooking(event)">
+                    <div class="form-group">
+                        <label class="form-label">Paciente</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                             <select name="clientEmail" class="form-select" required style="flex:1;">
+                                <option value="">Seleccionar Paciente...</option>
+                                ${patientsList}
+                            </select>
+                            <button type="button" onclick="turnoApp.showCreatePatientModal()" class="btn-secondary" title="Nuevo Paciente">+</button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Fecha</label>
+                            <input type="date" name="date" class="form-input" required value="${defaultDate || new Date().toISOString().split('T')[0]}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Hora</label>
+                            <input type="time" name="time" class="form-input" required value="${defaultTime}">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                         <label class="form-label">Servicio</label>
+                         <select name="serviceId" class="form-select" required>
+                            <option value="">Seleccionar Servicio...</option>
+                            ${servicesList}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                         <label class="form-label">Profesional</label>
+                         <select name="professionalId" class="form-select" required>
+                            <option value="">Seleccionar Profesional...</option>
+                            ${professionalsList}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Notas (Opcional)</label>
+                        <textarea name="notes" class="form-input" rows="2"></textarea>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary" style="margin-right: 0.5rem;">Cancelar</button>
+                        <button type="submit" class="btn-primary">Confirmar Turno</button>
+                    </div>
+                </form>
+            `;
+            this.openModal(content);
+        },
+
+        async confirmAdminBooking(e) {
+            e.preventDefault();
+            const form = e.target;
+            const clientEmail = form.clientEmail.value;
+            const date = form.date.value;
+            const time = form.time.value;
+            const serviceId = parseInt(form.serviceId.value);
+            const professionalId = parseInt(form.professionalId.value);
+            const notes = form.notes.value;
+
+            // Basic Validation
+            if (!clientEmail || !date || !time || !serviceId || !professionalId) {
+                alert('Por favor completa todos los campos requeridos.');
+                return;
+            }
+
+            // Find related data objects
+            const patient = state.patients.find(p => p.email === clientEmail);
+            const service = state.services.find(s => s.id === serviceId);
+            const professional = state.professionals.find(p => p.id === professionalId);
+
+            // Construct booking object
+            const newBooking = {
+                id: Date.now(), // Mock ID
+                date,
+                time,
+                serviceId,
+                serviceName: service.name,
+                duration: service.duration,
+                professionalId,
+                professionalName: professional.name,
+                clientEmail,
+                clientName: patient.name,
+                clientPhone: patient.phone,
+                status: 'Confirmado',
+                notes
+            };
+
+            // Save (Mock + Supabase would go here)
+            // For now pushing to state and LS
+            state.bookings.push(newBooking);
+
+            // Sync logic (optional for this demo, usually handled by backend)
+            // Save to DB?
+            /* 
+            const { error } = await supabase.from('bookings').insert([{ ...mapped_fields }]);
+            if (error) { alert('Error al guardar'); return; }
+            */
+
+            localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
+
+            this.showNotification('Turno agendado correctamente');
+            this.closeModal();
+            this.renderAdmin(); // Refresh calendar
         },
 
         renderLogin() {
@@ -2347,7 +3206,7 @@
                 return;
             }
 
-            // 2. Create Profile
+            // 2. Create Profile & Handle Session
             if (data.user) {
                 const { error: profileError } = await supabase
                     .from('profiles')
@@ -2357,13 +3216,33 @@
 
                 if (profileError) {
                     console.error("Profile creation failed:", profileError);
-                    // Fallback?
                 }
 
-                this.showNotification('Cuenta creada con éxito. Iniciando sesión...');
-                // Auto login usually happens on SignUp if confirm not required, checking session inside login not needed if we trust signUp session
-                // But let's call our standardize login flow to set state
-                await this.login(email, password);
+                // CHECK POINT: Check if Supabase returned a session (Auto Login active)
+                if (data.session) {
+                    this.showNotification('Cuenta creada con éxito. Ingresando...');
+
+                    // Initialize User State
+                    await this.fetchUserProfile(data.user.id);
+
+                    // Handle Pending Actions (Redirect Logic)
+                    const pending = localStorage.getItem('lumina_pending_action');
+                    if (pending) {
+                        const { serviceId } = JSON.parse(pending);
+                        localStorage.removeItem('lumina_pending_action'); // Clear it
+                        this.navigate('booking');
+                        if (serviceId) this.selectedService = serviceId;
+                    } else {
+                        // Default redirection
+                        this.navigate('home');
+                    }
+                    this.updateNav();
+
+                } else {
+                    // No session = Email Confirmation Required
+                    alert('Registro exitoso. Por favor revisa tu correo para confirmar tu cuenta antes de ingresar.');
+                    this.navigate('login');
+                }
             }
         },
 
@@ -2564,46 +3443,97 @@
             const booking = state.bookings.find(b => b.id === id);
             if (!booking) return;
 
+            const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == booking.professionalId ? 'selected' : ''}>${p.name}</option>`).join('');
+            const servicesList = state.services.map(s => `<option value="${s.id}" ${s.id == booking.serviceId ? 'selected' : ''}>${s.name}</option>`).join('');
+
             const content = `
-            <h3 class="mb-4">Editar Reserva</h3>
+            <div class="modal-header">
+                <h3>Editar Reserva</h3>
+                <p style="color: #666; font-size: 0.9rem;">${booking.clientName}</p>
+            </div>
             <form onsubmit="turnoApp.updateBooking(event, ${id})">
+                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Fecha</label>
+                        <input type="date" name="date" class="form-input" value="${booking.date}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Hora</label>
+                        <input type="time" name="time" class="form-input" value="${booking.time}" required>
+                    </div>
+                </div>
+
                 <div class="form-group">
+                    <label class="form-label">Profesional</label>
+                    <select name="professionalId" class="form-select" required>
+                        ${professionalsList}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Servicio</label>
+                    <select name="serviceId" class="form-select" required>
+                        ${servicesList}
+                    </select>
+                </div>
+
+                 <div class="form-group">
                     <label class="form-label">Estado</label>
                     <select name="status" class="form-select">
                         <option value="Confirmado" ${booking.status === 'Confirmado' ? 'selected' : ''}>Confirmado</option>
-                        <option value="Cancelado" ${booking.status === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+                        <option value="Pendiente" ${booking.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
                         <option value="Completado" ${booking.status === 'Completado' ? 'selected' : ''}>Completado</option>
+                         <option value="Cancelado" ${booking.status === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
                     </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Fecha</label>
-                <input type="date" name="date" class="form-input" value="${booking.date}" required>
-            </div>
-            <!-- Time is harder to edit without full logic loop, let's keep it simple for now -->
-            <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">Para cambiar horario o profesional, por favor cancela y crea una nueva reserva para evitar conflictos.</p>
+                </div>
 
-            <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                <button type="button" onclick="turnoApp.closeModal()" style="flex: 1; padding: 0.75rem; border: 1px solid #ddd; background: white; border-radius: 50px; cursor: pointer;">Cancelar</button>
-                <button type="submit" class="btn-primary" style="flex: 1;">Guardar Cambios</button>
-            </div>
-        </form>
-`;
+                <div class="form-group">
+                    <label class="form-label">Notas</label>
+                    <textarea name="notes" class="form-input" rows="2">${booking.notes || ''}</textarea>
+                </div>
+
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem; justify-content: space-between;">
+                    <button type="button" onclick="turnoApp.closeModal(); turnoApp.cancelBooking(${id})" style="color: #ef4444; background: none; border: none; font-weight: 500; cursor: pointer;">Cancelar Turno</button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary">Cerrar</button>
+                        <button type="submit" class="btn-primary">Guardar Cambios</button>
+                    </div>
+                </div>
+            </form>
+            `;
             this.openModal(content);
         },
 
         updateBooking(e, id) {
             e.preventDefault();
             const formData = new FormData(e.target);
+            const booking = state.bookings.find(b => b.id === id);
 
-            const bookingIndex = state.bookings.findIndex(b => b.id === id);
-            if (bookingIndex > -1) {
-                state.bookings[bookingIndex].status = formData.get('status');
-                state.bookings[bookingIndex].date = formData.get('date');
+            if (booking) {
+                booking.date = formData.get('date');
+                booking.time = formData.get('time');
+                booking.status = formData.get('status');
+                booking.notes = formData.get('notes');
+
+                // Update relations if changed (simplified)
+                const newProfId = parseInt(formData.get('professionalId'));
+                if (newProfId !== booking.professionalId) {
+                    booking.professionalId = newProfId;
+                    const prof = state.professionals.find(p => p.id === newProfId);
+                    booking.professionalName = prof ? prof.name : 'Unknown';
+                }
+
+                const newServiceId = parseInt(formData.get('serviceId'));
+                if (newServiceId !== booking.serviceId) {
+                    booking.serviceId = newServiceId;
+                    const srv = state.services.find(s => s.id === newServiceId);
+                    booking.serviceName = srv ? srv.name : 'Unknown';
+                }
 
                 localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
 
                 this.closeModal();
-                this.showNotification('Reserva actualizada');
+                this.showNotification('Reserva actualizada correctamente');
                 this.renderAdmin();
             }
         },
@@ -2701,7 +3631,7 @@
                              <span class="status-badge ${b.status === 'Confirmado' ? 'confirmado' : 'pendiente'}">${b.status}</span>
                         </div>
                         <div>
-                             <button onclick="turnoApp.openBookingDetails(${b.id})" class="btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">Ver</button>
+                             <button onclick="turnoApp.editBooking(${b.id})" class="btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">Editar</button>
                         </div>
                     </div>
                  `).join('');
