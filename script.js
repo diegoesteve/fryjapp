@@ -251,6 +251,14 @@
             this.updateNav();
         },
 
+        // Helper to format service prices across the app
+        formatServicePrice(service) {
+            if (service.priceType === 'variable' && service.priceRange) {
+                return service.priceRange;
+            }
+            return '$' + (service.price || 0);
+        },
+
         forgotPassword() {
             const email = prompt('Por favor ingresa tu email para recuperar tu contraseña:');
             if (email) {
@@ -666,7 +674,7 @@
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2rem;">
                                 <span style="color: #666;">Precio Estimado</span>
-                                <strong style="font-size: 1.25rem; color: var(--primary-dark);">${service.priceRange || '$' + service.price}</strong>
+                                <strong style="font-size: 1.25rem; color: var(--primary-dark);">${turnoApp.formatServicePrice(service)}</strong>
                             </div>
                             
                             <button onclick="turnoApp.startBooking(${service.id})" class="btn-primary" style="width: 100%; text-align: center; justify-content: center; padding: 1rem;">
@@ -770,7 +778,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
                     <div>
                         <span style="display:block; font-size: 0.8rem; color: #999;">Precio estimado</span>
-                        <span style="font-weight: 600; color: var(--primary-dark);">${service.priceRange || '$' + service.price}</span>
+                        <span style="font-weight: 600; color: var(--primary-dark);">${turnoApp.formatServicePrice(service)}</span>
                     </div>
                     <span style="color: #999; font-size: 0.9rem;">${service.duration} min</span>
                 </div>
@@ -864,7 +872,7 @@
                                     ${state.services
                     .filter(s => state.professionals.some(p => p.serviceIds.includes(s.id)))
                     .map(s =>
-                        `<option value="${s.id}" ${s.id === defaultService ? 'selected' : ''}>${s.name} - $${s.price}</option>`
+                        `<option value="${s.id}" ${s.id === defaultService ? 'selected' : ''}>${s.name} - ${turnoApp.formatServicePrice(s)}</option>`
                     ).join('')}
                                 </select>
                             </div>
@@ -1266,6 +1274,15 @@
             this.currentPatientList = visiblePatients;
         },
 
+        updateServiceFilter(key, value) {
+            if (key === 'clear') {
+                state.serviceFilters = { status: '', category: '', professionalId: '' };
+            } else {
+                state.serviceFilters[key] = value;
+            }
+            this.renderServicesManagement();
+        },
+
         // ENH-Services: Service Management
         renderServicesManagement() {
             const main = document.getElementById('main-content');
@@ -1305,31 +1322,31 @@
             </div>
 
             <!-- Service Filters -->
-            <div class="filters-bar" style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; border: 1px solid #e2e8f0;">
-                <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Estado</label>
-                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.status = this.value; turnoApp.renderServicesManagement()">
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <label class="filter-label">Estado</label>
+                    <select class="filter-select" onchange="turnoApp.updateServiceFilter('status', this.value)">
                         <option value="">Todos</option>
                         <option value="active" ${status === 'active' ? 'selected' : ''}>Activos</option>
                         <option value="inactive" ${status === 'inactive' ? 'selected' : ''}>Inactivos</option>
                     </select>
                 </div>
-                 <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Categoría</label>
-                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.category = this.value; turnoApp.renderServicesManagement()">
+                 <div class="filter-group">
+                    <label class="filter-label">Categoría</label>
+                    <select class="filter-select" onchange="turnoApp.updateServiceFilter('category', this.value)">
                         <option value="">Todas</option>
                         ${categories.map(cat => `<option value="${cat}" ${category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
                     </select>
                 </div>
-                <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Profesional Asignado</label>
-                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.professionalId = this.value; turnoApp.renderServicesManagement()">
+                <div class="filter-group">
+                    <label class="filter-label">Profesional Asignado</label>
+                    <select class="filter-select" onchange="turnoApp.updateServiceFilter('professionalId', this.value)">
                         <option value="">Todos</option>
                         ${state.professionals.map(p => `<option value="${p.id}" ${professionalId == p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                     </select>
                 </div>
-                 <button onclick="state.serviceFilters = { status: '', category: '', professionalId: '' }; turnoApp.renderServicesManagement()" class="btn-secondary" style="height: 38px; margin-top: 18px;">
-                     Limpiar
+                 <button onclick="turnoApp.updateServiceFilter('clear')" class="btn-filter-clear">
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Limpiar
                 </button>
             </div>
 
@@ -1357,7 +1374,7 @@
                                 <td><strong>${s.name}</strong></td>
                                 <td>${s.category}</td>
                                 <td>${s.duration} min</td>
-                                <td>$${s.price}</td>
+                                <td>${turnoApp.formatServicePrice(s)}</td>
                                 <td>
                                     <span class="status-badge ${s.active ? 'completado' : 'cancelado'}">
                                         ${s.active ? 'Activo' : 'Inactivo'}
@@ -1508,17 +1525,64 @@
 
                     <!-- Availability Tab -->
                     <div id="modal-tab-availability" class="modal-tab-content" style="display: none;">
-                        <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">Configura los días y horarios de atención habituales. Formato: HH:MM-HH:MM. Separa múltiples rangos con coma.</p>
+                        <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">Usa los interruptores para activar los días que atiendes y configura tus turnos (el segundo turno es opcional).</p>
                         
                         ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
                 const dayMap = { 'Mon': 'Lunes', 'Tue': 'Martes', 'Wed': 'Miércoles', 'Thu': 'Jueves', 'Fri': 'Viernes', 'Sat': 'Sábado', 'Sun': 'Domingo' };
-                const ranges = availability.schedule[day] ? availability.schedule[day].join(', ') : '';
+                const ranges = availability.schedule[day] || [];
+                const isActive = ranges.length > 0;
+                
+                let start1 = '', end1 = '', start2 = '', end2 = '';
+                if (ranges[0]) {
+                    [start1, end1] = ranges[0].split('-');
+                }
+                if (ranges[1]) {
+                    [start2, end2] = ranges[1].split('-');
+                }
+
                 return `
-                                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                                    <div style="width: 80px; font-weight: 500;">${dayMap[day]}</div>
-                                    <input type="text" name="schedule_${day}" class="form-input" style="flex: 1;" value="${ranges}" placeholder="Ej: 09:00-13:00, 14:00-18:00 (Vacío = No atiende)">
+                    <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; background: ${isActive ? '#fff' : '#f8fafc'}; transition: all 0.2s;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: ${isActive ? '1rem' : '0'};">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer; color: ${isActive ? 'var(--primary-dark)' : '#94a3b8'};">
+                                <input type="checkbox" name="active_${day}" ${isActive ? 'checked' : ''} onchange="
+                                    const c = document.getElementById('config_${day}');
+                                    c.style.display = this.checked ? 'block' : 'none';
+                                    this.parentElement.style.color = this.checked ? 'var(--primary-dark)' : '#94a3b8';
+                                    this.parentElement.parentElement.parentElement.style.background = this.checked ? '#fff' : '#f8fafc';
+                                    this.parentElement.nextElementSibling.innerText = this.checked ? 'Atiende' : 'Descanso';
+                                    this.parentElement.nextElementSibling.style.color = this.checked ? 'var(--primary)' : '#94a3b8';
+                                    if(this.checked && !document.querySelector('[name=start1_${day}]').value) {
+                                        document.querySelector('[name=start1_${day}]').value = '09:00';
+                                        document.querySelector('[name=end1_${day}]').value = '18:00';
+                                    }
+                                " style="width: 18px; height: 18px;">
+                                ${dayMap[day]}
+                            </label>
+                            <span style="font-size:0.8rem; font-weight: 500; color: ${isActive ? 'var(--primary)' : '#94a3b8'};">${isActive ? 'Atiende' : 'Descanso'}</span>
+                        </div>
+                        
+                        <div id="config_${day}" style="display: ${isActive ? 'block' : 'none'};">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.5rem;">
+                                <div>
+                                    <label style="font-size: 0.8rem; color:#666; display:block; margin-bottom:0.25rem;">Turno 1 (Principal)</label>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                        <input type="time" name="start1_${day}" class="form-input" value="${start1}">
+                                        <span style="color:#999">-</span>
+                                        <input type="time" name="end1_${day}" class="form-input" value="${end1}">
+                                    </div>
                                 </div>
-                            `;
+                                <div>
+                                    <label style="font-size: 0.8rem; color:#666; display:block; margin-bottom:0.25rem;">Turno 2 (Opcional)</label>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                        <input type="time" name="start2_${day}" class="form-input" value="${start2}">
+                                        <span style="color:#999">-</span>
+                                        <input type="time" name="end2_${day}" class="form-input" value="${end2}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
             }).join('')}
 
                         <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid #e2e8f0;">
@@ -1573,9 +1637,20 @@
             // Gather Schedule
             const schedule = {};
             ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
-                const val = formData.get(`schedule_${day}`);
-                if (val && val.trim() !== '') {
-                    schedule[day] = val.split(',').map(s => s.trim());
+                const isActive = formData.get(`active_${day}`);
+                if (isActive) {
+                    const s1 = formData.get(`start1_${day}`);
+                    const e1 = formData.get(`end1_${day}`);
+                    const s2 = formData.get(`start2_${day}`);
+                    const e2 = formData.get(`end2_${day}`);
+                    
+                    const dayRanges = [];
+                    if (s1 && e1) dayRanges.push(`${s1}-${e1}`);
+                    if (s2 && e2) dayRanges.push(`${s2}-${e2}`);
+                    
+                    if (dayRanges.length > 0) {
+                        schedule[day] = dayRanges;
+                    }
                 }
             });
 
@@ -1665,14 +1740,28 @@
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group">
-                    <label class="form-label">Precio ($)</label>
-                    <input type="number" name="price" class="form-input" value="${service ? service.price : ''}" required min="0">
+                    <label class="form-label">Tipo de Precio</label>
+                    <select class="form-select" name="priceType" onchange="document.getElementById('fixed-price-div').style.display = this.value === 'fixed' ? 'block' : 'none'; document.getElementById('var-price-div').style.display = this.value === 'variable' ? 'block' : 'none';">
+                        <option value="fixed" ${!service || service.priceType !== 'variable' ? 'selected' : ''}>Fijo</option>
+                        <option value="variable" ${service && service.priceType === 'variable' ? 'selected' : ''}>Variable / Estimado</option>
+                    </select>
                 </div>
                  <div class="form-group">
                     <label class="form-label">Icono (Lucide)</label>
                     <select name="icon" class="form-select">
                         ${icons.map(i => `<option value="${i.val}" ${service && service.icon === i.val ? 'selected' : ''}>${i.label}</option>`).join('')}
                     </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 0.5rem;">
+                <div id="fixed-price-div" style="display: ${!service || service.priceType !== 'variable' ? 'block' : 'none'};" class="form-group">
+                    <label class="form-label">Precio ($) (Referencia Base)</label>
+                    <input type="number" name="price" class="form-input" value="${service ? service.price : '0'}" min="0">
+                </div>
+                <div id="var-price-div" style="display: ${service && service.priceType === 'variable' ? 'block' : 'none'};" class="form-group">
+                    <label class="form-label">Detalle de Precio Variable (Ej: "Desde $15.000", "$10.000 - $20.000")</label>
+                    <input type="text" name="priceRange" class="form-input" value="${service && service.priceRange ? service.priceRange : ''}">
                 </div>
             </div>
 
@@ -1717,8 +1806,10 @@
             const serviceData = {
                 name: formData.get('name'),
                 category: formData.get('category'),
-                duration: parseInt(formData.get('duration')),
-                price: parseFloat(formData.get('price')),
+                duration: parseInt(formData.get('duration')) || 30,
+                price: parseFloat(formData.get('price')) || 0,
+                priceType: formData.get('priceType') || 'fixed',
+                priceRange: formData.get('priceRange') || '',
                 icon: formData.get('icon'),
                 description: formData.get('description'),
                 active: formData.get('active') === 'on'
@@ -1842,25 +1933,12 @@
             const email = form.email.value;
             const phone = form.phone.value;
 
-            if (state.users.find(u => u.email === email)) {
+            if (state.patients.find(u => u.email === email)) {
                 alert('Este email ya está registrado en el sistema.');
                 return;
             }
 
-            // 1. Create User
-            const newUser = {
-                email,
-                password: '123', // Default placeholder
-                name,
-                role: 'patient'
-            };
-            state.users.push(newUser);
-            // Persist users if we were using LS for them, but usually syncing happens via patients/visits. 
-            // For this demo, we'll assume state.users is enough or updated via app flow.
-            // Actually, let's sync users to LS for consistency in this demo app
-            // localStorage.setItem('lumina_users', JSON.stringify(state.users)); // Not strictly used by turnoApp.init but good for completeness
-
-            // 2. Create Patient Record
+            // 1. Create Patient Record
             const newPatient = {
                 name,
                 email,
@@ -2094,8 +2172,15 @@
         },
 
         // ENH-25: Reports
-        // ENH-25: Reports
-        // ENH-25: Reports
+        updateReportFilter(key, value) {
+            if (key === 'clear') {
+                state.reportFilters = { startDate: '', endDate: '', professionalId: '' };
+            } else {
+                state.reportFilters[key] = value;
+            }
+            this.renderReports();
+        },
+
         renderReports() {
             const user = state.currentUser;
             // Allow Admin and Professional
@@ -2162,28 +2247,28 @@
                 }
 
                      <!-- Filters -->
-                    <div class="filters-bar" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label" style="font-size: 0.85rem;">Desde</label>
-                            <input type="date" class="form-input" value="${startDate}" onchange="state.reportFilters.startDate = this.value; turnoApp.renderReports()">
+                    <div class="filters-bar">
+                        <div class="filter-group">
+                            <label class="filter-label">Desde</label>
+                            <input type="date" class="filter-select" value="${startDate}" onchange="turnoApp.updateReportFilter('startDate', this.value)">
                         </div>
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label" style="font-size: 0.85rem;">Hasta</label>
-                            <input type="date" class="form-input" value="${endDate}" onchange="state.reportFilters.endDate = this.value; turnoApp.renderReports()">
+                        <div class="filter-group">
+                            <label class="filter-label">Hasta</label>
+                            <input type="date" class="filter-select" value="${endDate}" onchange="turnoApp.updateReportFilter('endDate', this.value)">
                         </div>
                         
                         ${isAdmin ? `
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label" style="font-size: 0.85rem;">Profesional</label>
-                            <select class="form-select" onchange="state.reportFilters.professionalId = this.value; turnoApp.renderReports()">
+                        <div class="filter-group">
+                            <label class="filter-label">Profesional</label>
+                            <select class="filter-select" onchange="turnoApp.updateReportFilter('professionalId', this.value)">
                                 <option value="">Todos</option>
                                 ${state.professionals.map(p => `<option value="${p.id}" ${p.id == professionalId ? 'selected' : ''}>${p.name}</option>`).join('')}
                             </select>
                         </div>
                         ` : ''}
 
-                        <button onclick="state.reportFilters = { startDate: '', endDate: '', professionalId: '' }; turnoApp.renderReports()" class="btn-secondary" style="height: 42px;">
-                            Limpiar Filtros
+                        <button onclick="turnoApp.updateReportFilter('clear')" class="btn-filter-clear">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Limpiar
                         </button>
                     </div>
 
@@ -2277,6 +2362,11 @@
             if (document.getElementById('filter-month')) {
                 state.adminFilters.month = document.getElementById('filter-month').value;
             }
+            this.renderAdmin();
+        },
+
+        clearAdminFilters() {
+            state.adminFilters = { professionalId: '', status: '', month: '' };
             this.renderAdmin();
         },
 
@@ -2711,19 +2801,19 @@
 
             // --- FILTER BAR (Dynamic based on role) ---
             let filterBarHTML = `
-            <div class="admin-filters">
+            <div class="filters-bar" style="margin-bottom: 2rem;">
                 ${user.role === 'admin' ? `
                 <div class="filter-group">
-                    <label>Profesional</label>
-                    <select id="filter-prof" onchange="turnoApp.applyAdminFilters()">
+                    <label class="filter-label">Profesional</label>
+                    <select id="filter-prof" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         ${state.professionals.map(p => `<option value="${p.id}" ${state.adminFilters.professionalId == p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                     </select>
                 </div>
                 ` : `
                 <div class="filter-group">
-                    <label>Profesional</label>
-                    <div style="padding: 0.5rem; background: #e2e8f0; border-radius: 4px; color: #64748b; font-size: 0.9rem;">
+                    <label class="filter-label">Profesional</label>
+                    <div style="padding: 0.6rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-main); font-size: 0.95rem;">
                         ${state.professionals.find(p => p.id === user.id)?.name || 'Tú'}
                         <input type="hidden" id="filter-prof" value="${user.id}">
                     </div>
@@ -2731,8 +2821,8 @@
                 `}
                 
                 <div class="filter-group">
-                    <label>Estado</label>
-                     <select id="filter-status" onchange="turnoApp.applyAdminFilters()">
+                    <label class="filter-label">Estado</label>
+                     <select id="filter-status" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         <option value="Pendiente" ${state.adminFilters.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
                         <option value="Confirmado" ${state.adminFilters.status === 'Confirmado' ? 'selected' : ''}>Confirmado</option>
@@ -2790,30 +2880,30 @@
 
             return `
             <!-- Filters Toolbar -->
-            <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: end; border: 1px solid #e2e8f0;">
-                <div style="flex: 1; min-width: 200px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Profesional</label>
-                    <select id="filter-prof" class="form-select" style="margin:0;" onchange="turnoApp.applyAdminFilters()">
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <label class="filter-label">Profesional</label>
+                    <select id="filter-prof" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         ${state.professionals.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                     </select>
                 </div>
-                 <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Estado</label>
-                    <select id="filter-status" class="form-select" style="margin:0;" onchange="turnoApp.applyAdminFilters()">
+                 <div class="filter-group">
+                    <label class="filter-label">Estado</label>
+                    <select id="filter-status" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         <option value="Confirmado">Confirmado</option>
                         <option value="Completado">Completado</option>
                         <option value="Cancelado">Cancelado</option>
                     </select>
                 </div>
-                <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Mes</label>
-                    <input type="month" id="filter-month" class="form-input" style="margin:0;" value="${state.adminFilters.month}" onchange="turnoApp.applyAdminFilters()">
+                <div class="filter-group">
+                    <label class="filter-label">Mes</label>
+                    <input type="month" id="filter-month" class="filter-select" value="${state.adminFilters.month}" onchange="turnoApp.applyAdminFilters()">
                 </div>
-                <div style="display: flex; align-items: end;">
-                    <button onclick="state.adminFilters={professionalId:'',status:'',month:''}; turnoApp.renderAdmin()" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #666; cursor: pointer; text-decoration: underline;">Limpiar</button>
-                </div>
+                <button onclick="turnoApp.clearAdminFilters()" class="btn-filter-clear">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Limpiar
+                </button>
             </div>
 
             <div style="overflow-x: auto;">
@@ -2941,11 +3031,14 @@
                     <div class="day-content" onclick="turnoApp.showDayDetails('${dateStr}')" style="height: 100%;">
                         <div class="day-number">${d}</div>
                         ${dayBookings.length > 0 ? `
-                            <div class="day-indicators">
-                                ${dayBookings.slice(0, 3).map(b => `<span class="dot" title="${b.time} - ${b.serviceName}"></span>`).join('')}
-                                ${dayBookings.length > 3 ? '<span class="dot plus">+</span>' : ''}
+                            <div class="day-indicators" style="display:flex; flex-direction:column; gap:2px; margin-top:4px;">
+                                ${dayBookings.slice(0, 3).map(b => `
+                                    <div class="day-booking-pill" title="${b.time} - ${b.serviceName} con ${b.professionalName}">
+                                        ${b.time} ${b.clientName.split(' ')[0]}
+                                    </div>
+                                `).join('')}
                             </div>
-                            <div class="day-count">${dayBookings.length} turnos</div>
+                            ${dayBookings.length > 3 ? `<div class="day-count">+${dayBookings.length - 3} más</div>` : ''}
                         ` : ''}
                     </div>
                 </div>
@@ -2999,7 +3092,7 @@
         showAdminBookingModal(defaultDate = '', defaultTime = '', defaultProfId = '') {
             // Ensure data availability
             const patientsList = state.patients.map(p => `<option value="${p.email}">${p.name} (${p.email})</option>`).join('');
-            const servicesList = state.services.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - $${s.price}</option>`).join('');
+            const servicesList = state.services.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
             const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == defaultProfId ? 'selected' : ''}>${p.name}</option>`).join('');
 
             const content = `
