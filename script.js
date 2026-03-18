@@ -152,12 +152,17 @@
         },
 
         async fetchInventoryProducts() {
-            const { data, error } = await supabase.from('inventory_products').select('*').order('name');
-            if (data) state.inventoryProducts = data;
+            const { data, error } = await supabase.from('products').select('*, stock:inventory_stock(*)').order('name');
+            if (data) {
+                state.inventoryProducts = data.map(p => ({
+                    ...p,
+                    stock: p.stock && p.stock.length > 0 ? p.stock[0] : { total_quantity: 0, available_quantity: 0, reserved_quantity: 0 }
+                }));
+            }
         },
 
         async fetchInventoryRequests() {
-            const { data, error } = await supabase.from('inventory_requests').select('*, inventory_products(name), profiles:professional_id(name)').order('created_at', { ascending: false });
+            const { data, error } = await supabase.from('inventory_orders').select('*, profiles:professional_id(name), items:inventory_order_items(*, product:products(name, unit_type))').order('created_at', { ascending: false });
             if (data) state.inventoryRequests = data;
         },
 
@@ -3877,7 +3882,9 @@
                                 <tr>
                                     <th>Producto</th>
                                     <th>Unidad</th>
-                                    <th>Stock Actual</th>
+                                    <th>Disponible</th>
+                                    <th>Reservado</th>
+                                    <th>Total Físico</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
@@ -3885,32 +3892,34 @@
                                 ${state.inventoryProducts.map(p => `
                                 <tr>
                                     <td><strong>${p.name}</strong><br><small style="color:#666;">${p.description || ''}</small></td>
-                                    <td>${p.unit_measure}</td>
+                                    <td>${p.unit_type}</td>
                                     <td>
-                                        <span class="status-badge ${p.current_stock <= p.min_stock_alert ? 'cancelled' : 'completed'}">
-                                            ${p.current_stock}
+                                        <span class="status-badge ${p.stock.available_quantity <= 5 ? 'cancelled' : 'completed'}">
+                                            ${p.stock.available_quantity}
                                         </span>
                                     </td>
+                                    <td><span style="color:#f59e0b; font-weight:bold;">${p.stock.reserved_quantity}</span></td>
+                                    <td style="color:#64748b;">${p.stock.total_quantity}</td>
                                     <td>
                                         <button onclick="turnoApp.showAdjustStockModal('${p.id}')" class="btn-icon" title="Ajustar Stock" style="color:var(--primary);"><i data-lucide="calculator"></i></button>
                                         <button onclick="turnoApp.showProductModal('${p.id}')" class="btn-icon" title="Editar"><i data-lucide="edit"></i></button>
                                     </td>
                                 </tr>
                                 `).join('')}
-                                ${state.inventoryProducts.length === 0 ? '<tr><td colspan="4" class="text-center">No hay productos registrados.</td></tr>' : ''}
+                                ${state.inventoryProducts.length === 0 ? '<tr><td colspan="6" class="text-center">No hay productos registrados.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
 
-                    <h3 style="margin-top:3rem; margin-bottom:1rem;">Solicitudes de Profesionales</h3>
+                    <h3 style="margin-top:3rem; margin-bottom:1rem;">Gestión de Pedidos</h3>
                     <div class="data-table-container">
                         <table class="data-table">
                             <thead>
                                 <tr>
+                                    <th>ID Pedido</th>
                                     <th>Fecha</th>
                                     <th>Profesional</th>
-                                    <th>Producto</th>
-                                    <th>Cant. Solicitada</th>
+                                    <th>Detalles (Insumos)</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
                                 </tr>
@@ -3918,20 +3927,26 @@
                             <tbody>
                                 ${state.inventoryRequests.map(r => `
                                 <tr>
+                                    <td><small style="color:#94a3b8;">${r.id.split('-')[0]}</small></td>
                                     <td>${new Date(r.created_at).toLocaleDateString()}</td>
-                                    <td>${r.profiles ? r.profiles.name : 'N/A'}</td>
-                                    <td>${r.inventory_products ? r.inventory_products.name : 'Desconocido'}</td>
-                                    <td>${r.quantity}</td>
-                                    <td><span class="status-badge ${r.status === 'PENDING' ? 'pending' : (r.status === 'APPROVED' ? 'completed' : 'cancelled')}">${r.status}</span></td>
+                                    <td><strong>${r.profiles?.name || 'N/A'}</strong></td>
                                     <td>
+                                        <ul style="margin:0; padding-left:1.2rem; font-size:0.85rem;">
+                                            ${r.items?.map(i => `<li>${i.quantity}x ${i.product?.name} (${i.product?.unit_type})</li>`).join('') || 'Sin items'}
+                                        </ul>
+                                    </td>
+                                    <td><span class="status-badge status-${r.status.toLowerCase()}">${r.status}</span></td>
+                                    <td style="display:flex; gap:0.5rem; align-items:center;">
                                         ${r.status === 'PENDING' ? `
-                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'APPROVED')" class="btn-icon" title="Aprobar" style="color:#10b981;"><i data-lucide="check-circle"></i></button>
-                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'REJECTED')" class="btn-icon" title="Rechazar" style="color:#ef4444;"><i data-lucide="x-circle"></i></button>
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'APPROVED')" class="btn-secondary" style="color:#10b981; border-color:#10b981; padding: 4px 8px;">Aprobar</button>
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'REJECTED')" class="btn-secondary" style="color:#ef4444; border-color:#ef4444; padding: 4px 8px;">Rechazar</button>
+                                        ` : r.status === 'APPROVED' ? `
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'DELIVERED')" class="btn-primary" style="padding: 4px 8px;">Entregar Físicamente</button>
                                         ` : '-'}
                                     </td>
                                 </tr>
                                 `).join('')}
-                                ${state.inventoryRequests.length === 0 ? '<tr><td colspan="6" class="text-center">No hay solicitudes recientes.</td></tr>' : ''}
+                                ${state.inventoryRequests.length === 0 ? '<tr><td colspan="6" class="text-center">No hay pedidos recientes.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
@@ -3945,24 +3960,26 @@
                         <table class="data-table">
                             <thead>
                                 <tr>
+                                    <th>ID Pedido</th>
                                     <th>Fecha</th>
-                                    <th>Producto</th>
-                                    <th>Cantidad</th>
+                                    <th>Mis Insumos Requeridos</th>
                                     <th>Estado</th>
-                                    <th>Respuesta Admin</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${myRequests.map(r => `
                                 <tr>
+                                    <td><small style="color:#94a3b8;">${r.id.split('-')[0]}</small></td>
                                     <td>${new Date(r.created_at).toLocaleDateString()}</td>
-                                    <td>${r.inventory_products ? r.inventory_products.name : 'Desconocido'}</td>
-                                    <td>${r.quantity}</td>
-                                    <td><span class="status-badge ${r.status === 'PENDING' ? 'pending' : (r.status === 'APPROVED' ? 'completed' : 'cancelled')}">${r.status}</span></td>
-                                    <td>${r.admin_response || '-'}</td>
+                                    <td>
+                                        <ul style="margin:0; padding-left:1.2rem; font-size:0.85rem;">
+                                            ${r.items?.map(i => `<li>${i.quantity}x ${i.product?.name} (${i.product?.unit_type})</li>`).join('') || 'Sin items'}
+                                        </ul>
+                                    </td>
+                                    <td><span class="status-badge status-${r.status.toLowerCase()}">${r.status}</span></td>
                                 </tr>
                                 `).join('')}
-                                ${myRequests.length === 0 ? '<tr><td colspan="5" class="text-center">No has solicitado insumos.</td></tr>' : ''}
+                                ${myRequests.length === 0 ? '<tr><td colspan="4" class="text-center">No has emitido pedidos aún.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
@@ -3977,18 +3994,18 @@
             this.updateIcons();
         },
 
-        // --- INVENTORY LOGIC ---
+        // --- INVENTORY LOGIC (V2 RPC BACKED) ---
         showProductModal(productId = null) {
             const product = productId ? state.inventoryProducts.find(p => p.id === productId) : null;
             const content = `
                 <div class="modal-header">
-                    <h3>${product ? 'Editar Producto' : 'Nuevo Insumo / Producto'}</h3>
+                    <h3>${product ? 'Editar Producto' : 'Nuevo Producto / Base'}</h3>
                     <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
                 </div>
                 <div class="modal-tab-content">
                     <form onsubmit="turnoApp.saveProduct(event, ${product ? `'${product.id}'` : null})">
                         <div class="form-group">
-                            <label class="form-label">Nombre del Producto</label>
+                            <label class="form-label">Nombre Comercial</label>
                             <input type="text" name="name" class="form-input" required value="${product ? product.name : ''}">
                         </div>
                         <div class="form-group">
@@ -3997,18 +4014,18 @@
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
                             <div class="form-group">
-                                <label class="form-label">Unidad de Medida</label>
-                                <input type="text" name="unit_measure" class="form-input" required value="${product ? product.unit_measure : 'unidades'}">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Alerta de Stock (Mínimo)</label>
-                                <input type="number" name="min_stock_alert" class="form-input" required value="${product ? product.min_stock_alert : 5}" min="0">
+                                <label class="form-label">Tipo de Unidad</label>
+                                <select name="unit_type" class="form-select" required>
+                                    <option value="unit" ${product && product.unit_type === 'unit' ? 'selected' : ''}>Unidad(es)</option>
+                                    <option value="vial" ${product && product.unit_type === 'vial' ? 'selected' : ''}>Ampolla / Vial</option>
+                                    <option value="ml" ${product && product.unit_type === 'ml' ? 'selected' : ''}>Mililitros (ml)</option>
+                                    <option value="box" ${product && product.unit_type === 'box' ? 'selected' : ''}>Caja(s)</option>
+                                </select>
                             </div>
                         </div>
-                        ${!product ? `<div class="form-group"><label class="form-label">Stock Inicial</label><input type="number" name="initial_stock" class="form-input" required value="0" min="0"></div>` : ''}
                         
                         <div style="margin-top:2rem; display:flex; justify-content:flex-end;">
-                            <button type="submit" class="btn-primary">Guardar Producto</button>
+                            <button type="submit" class="btn-primary">Guardar Catálogo</button>
                         </div>
                     </form>
                 </div>
@@ -4022,57 +4039,47 @@
             const payload = {
                 name: form.name.value,
                 description: form.description.value,
-                unit_measure: form.unit_measure.value,
-                min_stock_alert: parseFloat(form.min_stock_alert.value)
+                unit_type: form.unit_type.value
             };
 
-            this.showNotification('Guardando...');
+            this.showNotification('Procesando...');
             
             if (productId) {
-                await supabase.from('inventory_products').update(payload).eq('id', productId);
+                await supabase.from('products').update(payload).eq('id', productId);
             } else {
-                payload.current_stock = parseFloat(form.initial_stock.value);
-                const { data, error } = await supabase.from('inventory_products').insert([payload]).select();
-                // If initial stock > 0, we should ideally log a movement. Simulating for MVP.
-                if (data && data.length > 0 && payload.current_stock > 0) {
-                    await supabase.from('inventory_movements').insert([{
-                        product_id: data[0].id,
-                        user_id: state.currentUser.id,
-                        movement_type: 'ADJUSTMENT',
-                        quantity: payload.current_stock,
-                        reason: 'Stock Inicial'
-                    }]);
-                }
+                await supabase.from('products').insert([payload]);
             }
             
             this.closeModal();
             await this.fetchInventoryProducts();
             this.renderInventoryManagement();
-            this.showNotification('Producto guardado correctamente.');
+            this.showNotification('Catálogo actualizado.');
         },
 
         showAdjustStockModal(productId) {
             const product = state.inventoryProducts.find(p => p.id === productId);
             const content = `
                 <div class="modal-header">
-                    <h3>Ajuste Rápido de Stock</h3>
+                    <h3>Operación Manual de Stock</h3>
                     <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
                 </div>
                 <div style="padding:1rem;">
-                    <p style="margin-bottom:1rem;">Ajuste manual para <strong>${product.name}</strong>. Mueve las unidades sumando o restando (ej. para descontar por caducidad o sumar compra omitida).</p>
+                    <p style="margin-bottom:1rem; border-left: 3px solid #3b82f6; padding-left:0.8rem; background:#eff6ff; padding: 0.8rem; border-radius:4px;">
+                        Estás ajustando directamente el stock de <strong>${product.name}</strong>. Esta operación generará un log transaccional inmutable.
+                    </p>
                     <form onsubmit="turnoApp.saveStockAdjustment(event, '${productId}')">
                         <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1rem;">
                             <div class="form-group">
-                                <label class="form-label">Cantidad a modificar</label>
+                                <label class="form-label">Unidades (Ej: 10, -3)</label>
                                 <input type="number" name="adj_quantity" class="form-input" required placeholder="Ej: 5 o -2">
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Motivo (para Auditoría)</label>
-                                <input type="text" name="reason" class="form-input" required placeholder="Ej: Vencimiento, Compra manual...">
+                                <label class="form-label">Causa (Audit Log)</label>
+                                <input type="text" name="reason" class="form-input" required placeholder="Ej: Vencimiento, Proveedor, Merma...">
                             </div>
                         </div>
                         <div style="margin-top:1.5rem; text-align:right;">
-                            <button type="submit" class="btn-primary">Registrar Movimiento</button>
+                            <button type="submit" class="btn-primary" style="background:#0f172a; border-color:#0f172a;">Ejecutar Bloqueo y Guardar</button>
                         </div>
                     </form>
                 </div>
@@ -4082,67 +4089,53 @@
 
         async saveStockAdjustment(event, productId) {
             event.preventDefault();
-            const qty = parseFloat(event.target.adj_quantity.value);
+            const qty = parseInt(event.target.adj_quantity.value);
             const reason = event.target.reason.value;
             
             if (qty === 0) return this.closeModal();
 
-            const product = state.inventoryProducts.find(p => p.id === productId);
-            if (product.current_stock + qty < 0) {
-                return alert('Error: El stock resultante no puede ser negativo.');
-            }
-
-            this.showNotification('Registrando...');
+            this.showNotification('Iniciando transacción segura...');
             
-            // 1. Log Movement
-            const { error: logError } = await supabase.from('inventory_movements').insert([{
-                product_id: productId,
-                user_id: state.currentUser.id,
-                movement_type: 'ADJUSTMENT',
-                quantity: qty,
-                reason: reason
-            }]);
+            // 1. Invocar RPC para asegurar ACID y concurrencia for update
+            const { error: rpcError } = await supabase.rpc('rpc_inventory_adjust_stock', {
+                p_product_id: productId,
+                p_quantity: qty,
+                p_reason: reason,
+                p_user_id: state.currentUser.id
+            });
 
-            if (!logError) {
-                // 2. Update Stock
-                await supabase.from('inventory_products').update({
-                    current_stock: product.current_stock + qty
-                }).eq('id', productId);
-                
+            if (!rpcError) {
                 await this.fetchInventoryProducts();
                 this.renderInventoryManagement();
                 this.closeModal();
-                this.showNotification('Stock actualizado.');
+                this.showNotification('Transacción exitosa. Stock comprometido.');
             } else {
-                alert('Hubo un error al registrar el movimiento.');
+                console.error(rpcError);
+                alert('La transacción fue abortada: Ocurrió un conflicto de bloqueo negativo o el stock no daría abasto.');
             }
         },
 
         showInventoryRequestModal() {
             const content = `
                 <div class="modal-header">
-                    <h3>Solicitar Insumo</h3>
+                    <h3>Levantar Pedido Interno</h3>
                     <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
                 </div>
                 <div class="modal-tab-content">
                     <form onsubmit="turnoApp.saveInventoryRequest(event)">
                         <div class="form-group">
-                            <label class="form-label">Seleccionar Insumo</label>
+                            <label class="form-label">Insumo Requerido (De momento sólo 1 item por pedido para simplificar UI)</label>
                             <select name="product_id" class="form-select" required>
-                                ${state.inventoryProducts.map(p => `<option value="${p.id}">${p.name} (${p.unit_measure})</option>`).join('')}
+                                ${state.inventoryProducts.map(p => `<option value="${p.id}">${p.name} (Stock Display: ${p.stock.available_quantity} ${p.unit_type})</option>`).join('')}
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Cantidad Solicitada</label>
+                            <label class="form-label">Cantidad a Solicitar</label>
                             <input type="number" name="quantity" class="form-input" required value="1" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Comentarios (Opcional)</label>
-                            <textarea name="comments" class="form-input" rows="3" placeholder="Ej: Para los turnos del próximo viernes..."></textarea>
                         </div>
                         
                         <div style="margin-top:2rem; text-align:right;">
-                            <button type="submit" class="btn-primary">Enviar Solicitud</button>
+                            <button type="submit" class="btn-primary">Generar Orden</button>
                         </div>
                     </form>
                 </div>
@@ -4152,56 +4145,62 @@
 
         async saveInventoryRequest(event) {
             event.preventDefault();
-            const payload = {
-                professional_id: state.currentUser.id,
-                product_id: event.target.product_id.value,
-                quantity: parseFloat(event.target.quantity.value),
-                comments: event.target.comments.value
-            };
+            const product_id = event.target.product_id.value;
+            const qty = parseInt(event.target.quantity.value);
 
-            this.showNotification('Enviando...');
-            const { error } = await supabase.from('inventory_requests').insert([payload]);
-            if (!error) {
-                await this.fetchInventoryRequests();
-                this.renderInventoryManagement();
-                this.closeModal();
-                this.showNotification('Solicitud enviada al administrador.');
-            } else {
-                alert('No se pudo enviar la solicitud.');
+            this.showNotification('Procesando Orden...');
+            
+            // Inserción dual: orders headers y orders items
+            const { data: order, error: orderErr } = await supabase.from('inventory_orders')
+                .insert([{ professional_id: state.currentUser.id, status: 'PENDING' }])
+                .select().single();
+
+            if (!orderErr && order) {
+                const { error: itemErr } = await supabase.from('inventory_order_items')
+                    .insert([{ order_id: order.id, product_id: product_id, quantity: qty }]);
+                
+                if (!itemErr) {
+                    await this.fetchInventoryRequests();
+                    this.renderInventoryManagement();
+                    this.closeModal();
+                    this.showNotification('Orden generada correctamente.');
+                    return;
+                }
             }
+            alert('Fallo registrando en base.');
         },
 
         async updateRequestStatus(reqId, newStatus) {
             const req = state.inventoryRequests.find(r => r.id === reqId);
             if (!req) return;
 
-            if (newStatus === 'APPROVED') {
-                const product = state.inventoryProducts.find(p => p.id === req.product_id);
-                if (!product || product.current_stock < req.quantity) {
-                    return alert('¡Atención! No hay stock suficiente para aprobar esta solicitud. Recházala o ajusta el stock primero.');
-                }
+            this.showNotification('Ejecutando lógica de estado transaccional...');
 
-                // If approved, deduct stock
-                await supabase.from('inventory_products').update({ current_stock: product.current_stock - req.quantity }).eq('id', req.product_id);
+            if (newStatus === 'APPROVED') {
+                // Mueve available -> reserved (RPC locking)
+                const { error } = await supabase.rpc('rpc_inventory_approve_order', {
+                    p_order_id: reqId,
+                    p_user_id: state.currentUser.id
+                });
+                if (error) { console.error(error); return alert('Error procesando reservas. Probablemente stock insuficiente durante el bloqueo pesimista.'); }
+            
+            } else if (newStatus === 'DELIVERED') {
+                // Saca de reserved y efectúa el OUT (RPC locking)
+                const { error } = await supabase.rpc('rpc_inventory_deliver_order', {
+                    p_order_id: reqId,
+                    p_user_id: state.currentUser.id
+                });
+                if (error) { console.error(error); return alert('Error al registrar la entrega.'); }
                 
-                // Log movement
-                await supabase.from('inventory_movements').insert([{
-                    product_id: req.product_id,
-                    user_id: state.currentUser.id,
-                    movement_type: 'OUT',
-                    quantity: -req.quantity,
-                    reason: `Entrega a profesional: ${req.profiles?.name}`,
-                    reference_id: req.id
-                }]);
+            } else if (newStatus === 'REJECTED') {
+                // Rechazo simple (No implica blocks masIVOS)
+                await supabase.from('inventory_orders').update({ status: 'REJECTED' }).eq('id', reqId);
             }
 
-            this.showNotification('Procesando...');
-            await supabase.from('inventory_requests').update({ status: newStatus }).eq('id', reqId);
-            
             await this.fetchInventoryProducts();
             await this.fetchInventoryRequests();
             this.renderInventoryManagement();
-            this.showNotification('Estado actualizado.');
+            this.showNotification('Orden procesada sistémicamente bajo patrón ACID.');
         },
 
         cancelBooking(id) {
