@@ -23,7 +23,15 @@
         serviceFilters: { status: '', category: '', professionalId: '' },
         agendaView: { viewMode: 'month', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: new Date() },
         visibleServicesCount: 4,
-        isLoading: false
+        isLoading: false,
+        settings: {
+            clinicName: 'JuliEsteve Salud',
+            email: 'contacto@juliestevesalud.com',
+            phone: '+54 11 1234-5678',
+            address: 'Av. Corrientes 1234, CABA',
+            currency: 'ARS',
+            primaryColor: '#8b5cf6'
+        }
     };
 
     // App Logic
@@ -38,6 +46,14 @@
                 }
                 // Initialize global client
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+                // 0.5 Load Settings from LocalStorage & Apply Theme
+                const localSettings = localStorage.getItem('lumina_clinic_settings');
+                if (localSettings) {
+                    state.settings = { ...state.settings, ...JSON.parse(localSettings) };
+                }
+                document.documentElement.style.setProperty('--primary', state.settings.primaryColor);
+                this.updateBranding();
 
                 // 1. Check Session
                 const { data: { session } } = await supabase.auth.getSession();
@@ -204,6 +220,9 @@
                 case 'professionals-management':
                     this.renderProfessionalsManagement();
                     break;
+                case 'settings':
+                    this.renderSettings();
+                    break;
                 default:
                     this.renderHome();
             }
@@ -249,6 +268,7 @@
             state.bookingFor = null;
             this.navigate('home');
             this.updateNav();
+            this.renderSidebar();
         },
 
         // Helper to format service prices across the app
@@ -443,8 +463,18 @@
 
         updateIcons() {
             if (window.lucide) {
-                lucide.createIcons();
+                window.lucide.createIcons();
             }
+        },
+
+        updateBranding() {
+            document.title = `${state.settings.clinicName} | Portal de Reservas`;
+            
+            const logoEl = document.querySelector('.logo');
+            if (logoEl) logoEl.innerHTML = `${state.settings.clinicName}<span>.</span>`;
+            
+            const footerText = document.querySelector('.footer p');
+            if (footerText) footerText.innerHTML = `&copy; ${new Date().getFullYear()} ${state.settings.clinicName}. Todos los derechos reservados.<br><br>📍 ${state.settings.address} | ✉ ${state.settings.email} | 📞 ${state.settings.phone}`;
         },
 
         showNotification(message) {
@@ -983,14 +1013,33 @@
             const service = state.services.find(s => s.id == serviceId);
             const duration = service.duration;
             const times = [];
-            const startTotalMinutes = 9 * 60; // 09:00
-            const endTotalMinutes = 18 * 60;  // 18:00
-            const lunchStart = 13 * 60;       // 13:00
-            const lunchEnd = 14 * 60;         // 14:00
+            
+            const prof = state.professionals.find(p => p.id == profId);
+            
+            if (prof && this.isDateFullyBlocked(prof.availability?.blockouts, date)) {
+                slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional se encuentra de vacaciones o no atiende este día completo.</p>';
+                return;
+            }
+
+            const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+            const schedule = prof?.availability?.schedule?.[dayName] || [];
+
+            if (schedule.length === 0) {
+                 slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional no atiende los días ' + new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }) + 's.</p>';
+                 return;
+            }
+
+            let minMin = 24 * 60;
+            let maxMin = 0;
+            schedule.forEach(r => {
+                const [s, e] = r.split('-');
+                minMin = Math.min(minMin, this.timeToMinutes(s));
+                maxMin = Math.max(maxMin, this.timeToMinutes(e));
+            });
 
             // Get existing bookings for this professional on this date
             const existingBookings = state.bookings.filter(b =>
-                b.professionalId == profId && b.date === date
+                b.professionalId == profId && b.date === date && b.status !== 'Cancelado'
             );
 
             // ENH-17: Filter past times
@@ -1002,39 +1051,43 @@
                 selectedDate.getFullYear() === now.getFullYear();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-            for (let currentTime = startTotalMinutes; currentTime + duration <= endTotalMinutes; currentTime += duration) {
+            // Generate slots bounding minMin to maxMin
+            for (let currentTime = minMin; currentTime + duration <= maxMin; currentTime += duration) {
+                const slotEnd = currentTime + duration;
+                
+                // Check if slot falls ENTIRELY within ANY of the defined schedule ranges
+                const isWithinWorkingHours = schedule.some(range => {
+                    const [sTime, eTime] = range.split('-');
+                    const sMin = this.timeToMinutes(sTime);
+                    const eMin = this.timeToMinutes(eTime);
+                    return currentTime >= sMin && slotEnd <= eMin;
+                });
+
+                if (!isWithinWorkingHours) continue;
 
                 // Skip past times if today
                 if (isToday && currentTime <= currentMinutes) continue;
 
-                // Check if slot overlaps with lunch break
-                const slotEnd = currentTime + duration;
-                // Overlap logic: Start < LunchEnd AND End > LunchStart
-                const overlapsLunch = (currentTime < lunchEnd && slotEnd > lunchStart);
+                // Validate Blockouts (Specific Hours)
+                const isBlocked = this.isTimeBlocked(prof.availability?.blockouts, date, currentTime, duration);
 
                 // Booking overlap check
                 const isBooked = existingBookings.some(b => {
-                    const [bHour, bMin] = b.time.split(':').map(Number);
-                    const bStart = bHour * 60 + bMin;
-                    const bService = state.services.find(s => s.name === b.serviceName); // Fallback if no ID in old records
+                    const bStart = this.timeToMinutes(b.time);
+                    const bService = state.services.find(s => s.name === b.serviceName); 
                     const bDuration = bService ? bService.duration : 60;
                     const bEnd = bStart + bDuration;
-
-                    // Overlap: NewStart < ExistingEnd AND NewEnd > ExistingStart
                     return (currentTime < bEnd && slotEnd > bStart);
                 });
 
-                if (!overlapsLunch) {
-                    // Convert minutes back to HH:MM format
-                    const hours = Math.floor(currentTime / 60);
-                    const minutes = currentTime % 60;
-                    const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} `;
+                const hours = Math.floor(currentTime / 60);
+                const minutes = currentTime % 60;
+                const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} `;
 
-                    times.push({
-                        time: timeStr,
-                        available: !isBooked
-                    });
-                }
+                times.push({
+                    time: timeStr,
+                    available: !isBooked && !isBlocked
+                });
             }
 
             if (times.length === 0) {
@@ -1510,6 +1563,22 @@
                             <input type="text" name="image" class="form-input" value="${prof ? prof.image : ''}" placeholder="https://...">
                         </div>
                         
+                        ${!isEdit ? `
+                        <h4 style="margin-bottom: 0.5rem; margin-top: 1.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">Credenciales de Acceso</h4>
+                        <div class="form-group">
+                            <label class="form-label">Email de Acceso (Requerido)</label>
+                            <input type="email" name="userEmail" class="form-input" required value="">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Contraseña</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" name="userPassword" id="prof-password" class="form-input" required value="">
+                                <button type="button" class="btn-secondary" onclick="document.getElementById('prof-password').value = Math.random().toString(36).slice(-8);">Generar</button>
+                            </div>
+                            <p style="font-size: 0.8rem; color: #666; margin-top: 0.25rem;">Copia esta contraseña y el email para enviárselos al profesional.</p>
+                        </div>
+                        ` : ''}
+                        
                         <div class="form-group">
                             <label class="form-label">Servicios Asignados</label>
                             <div style="max-height: 150px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 0.5rem; border-radius: 6px;">
@@ -1586,11 +1655,18 @@
             }).join('')}
 
                         <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid #e2e8f0;">
-                        
-                        <h4 style="margin-bottom: 0.5rem;">Días Bloqueados / Vacaciones</h4>
-                        <div class="form-group">
-                            <label class="form-label">Fechas (YYYY-MM-DD, separadas por coma)</label>
-                            <input type="text" name="blockouts" class="form-input" value="${availability.blockouts.join(', ')}" placeholder="Ej: 2024-12-25, 2025-01-01">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                            <h4 style="margin: 0;">Reglas de Excepción y Vacaciones</h4>
+                            <button type="button" class="btn-secondary" onclick="turnoApp.addBlockoutRow()" style="padding: 0.25rem 0.5rem; font-size:0.8rem;">+ Agregar Regla</button>
+                        </div>
+                        <div id="blockouts-container" style="display:flex; flex-direction:column; gap:0.5rem;">
+                            ${(Array.isArray(availability.blockouts) ? availability.blockouts : []).map((b, i) => {
+                                // Soporte para formato legacy de strings
+                                if (typeof b === 'string') {
+                                    b = { type: 'full_day', start: b };
+                                }
+                                return turnoApp.generateBlockoutRowHTML(b, i);
+                            }).join('')}
                         </div>
                     </div>
 
@@ -1603,11 +1679,90 @@
             this.openModal(content);
         },
 
+        timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const [h, m] = timeStr.split(':').map(Number);
+            return h * 60 + (m || 0);
+        },
+
+        isDateFullyBlocked(blockouts, dateStr) {
+            if (!blockouts || !Array.isArray(blockouts)) return false;
+            return blockouts.some(b => {
+                if (typeof b === 'string') return b === dateStr;
+                if (b.type === 'full_day' && b.start === dateStr) return true;
+                if (b.type === 'date_range' && dateStr >= b.start && dateStr <= b.end) return true;
+                return false;
+            });
+        },
+
+        isTimeBlocked(blockouts, dateStr, slotStartMin, slotDuration) {
+            if (!blockouts || !Array.isArray(blockouts)) return false;
+            const slotEndMin = slotStartMin + slotDuration;
+            
+            return blockouts.some(b => {
+                if (b.type === 'time_slot' && b.start === dateStr) {
+                    const bStartMin = this.timeToMinutes(b.startTime);
+                    const bEndMin = this.timeToMinutes(b.endTime);
+                    return slotStartMin < bEndMin && slotEndMin > bStartMin;
+                }
+                return false;
+            });
+        },
+
         switchModalTab(tabId) {
             document.querySelectorAll('.modal-tab-content').forEach(el => el.style.display = 'none');
             document.getElementById(`modal-tab-${tabId}`).style.display = 'block';
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`tab-btn-${tabId}`).classList.add('active');
+        },
+
+        generateBlockoutRowHTML(b = { type: 'full_day', start: '' }, index = Date.now()) {
+            return `
+            <div class="blockout-row" style="border: 1px solid #e2e8f0; border-radius:6px; padding: 0.75rem; background:#f8fafc; position:relative;" data-id="${index}">
+                <button type="button" onclick="this.closest('.blockout-row').remove()" style="position:absolute; right: 0.5rem; top: 0.5rem; background:none; border:none; color:#be123c; cursor:pointer;" title="Eliminar regla">✖</button>
+                <div style="display:grid; grid-template-columns: 1fr 2fr; gap:0.5rem; align-items:end;">
+                    <div>
+                        <label style="font-size:0.75rem; color:#666;">Tipo de Regla</label>
+                        <select name="bo_type_${index}" class="form-select" onchange="const row = this.closest('.blockout-row'); row.querySelector('.bo-date').style.display = this.value === 'date_range' ? 'none' : 'block'; row.querySelector('.bo-range').style.display = this.value === 'date_range' ? 'flex' : 'none'; row.querySelector('.bo-time').style.display = this.value === 'time_slot' ? 'flex' : 'none';" style="padding: 0.4rem;">
+                            <option value="full_day" ${b.type === 'full_day' ? 'selected' : ''}>Día Completo</option>
+                            <option value="date_range" ${b.type === 'date_range' ? 'selected' : ''}>Rango de Días</option>
+                            <option value="time_slot" ${b.type === 'time_slot' ? 'selected' : ''}>Horario Específico</option>
+                        </select>
+                    </div>
+                    <div class="bo-date" style="display: ${b.type !== 'date_range' ? 'block' : 'none'};">
+                        <label style="font-size:0.75rem; color:#666;">Fecha</label>
+                        <input type="date" name="bo_date_${index}" class="form-input" style="padding: 0.4rem;" value="${b.type !== 'date_range' ? b.start : ''}">
+                    </div>
+                    <div class="bo-range" style="display: ${b.type === 'date_range' ? 'flex' : 'none'}; gap:0.5rem;">
+                        <div style="flex:1;">
+                            <label style="font-size:0.75rem; color:#666;">Desde</label>
+                            <input type="date" name="bo_start_${index}" class="form-input" style="padding: 0.4rem;" value="${b.type === 'date_range' ? b.start : ''}">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:0.75rem; color:#666;">Hasta</label>
+                            <input type="date" name="bo_end_${index}" class="form-input" style="padding: 0.4rem;" value="${b.type === 'date_range' ? b.end : ''}">
+                        </div>
+                    </div>
+                </div>
+                <div class="bo-time" style="display: ${b.type === 'time_slot' ? 'flex' : 'none'}; gap:0.5rem; margin-top:0.5rem;">
+                     <div>
+                        <label style="font-size:0.75rem; color:#666;">Hora Inicio</label>
+                        <input type="time" name="bo_startTime_${index}" class="form-input" style="padding: 0.4rem;" value="${b.startTime || ''}">
+                     </div>
+                     <div>
+                        <label style="font-size:0.75rem; color:#666;">Hora Fin</label>
+                        <input type="time" name="bo_endTime_${index}" class="form-input" style="padding: 0.4rem;" value="${b.endTime || ''}">
+                     </div>
+                </div>
+            </div>
+            `;
+        },
+
+        addBlockoutRow() {
+            const container = document.getElementById('blockouts-container');
+            if(container) {
+                container.insertAdjacentHTML('beforeend', this.generateBlockoutRowHTML({type:'full_day', start:''}, Date.now() + Math.floor(Math.random() * 1000)));
+            }
         },
 
         toggleProfessionalStatus(id) {
@@ -1619,7 +1774,7 @@
             }
         },
 
-        saveProfessional(e, id) {
+        async saveProfessional(e, id) {
             e.preventDefault();
             const form = e.target;
             const formData = new FormData(form);
@@ -1654,10 +1809,29 @@
                 }
             });
 
-            // Gather Blockouts
-            const blockoutsStr = formData.get('blockouts');
-            const blockouts = blockoutsStr ? blockoutsStr.split(',').map(s => s.trim()) : [];
-
+            // Gather Blockouts Advanced
+            const blockouts = [];
+            const blockoutRows = form.querySelectorAll('.blockout-row');
+            blockoutRows.forEach(row => {
+                const idAttr = row.getAttribute('data-id');
+                const type = formData.get(`bo_type_${idAttr}`);
+                const b = { type };
+                
+                if (type === 'full_day') {
+                    b.start = formData.get(`bo_date_${idAttr}`);
+                    if (!b.start) return; // Skip empty
+                } else if (type === 'time_slot') {
+                    b.start = formData.get(`bo_date_${idAttr}`);
+                    b.startTime = formData.get(`bo_startTime_${idAttr}`);
+                    b.endTime = formData.get(`bo_endTime_${idAttr}`);
+                    if (!b.start || !b.startTime || !b.endTime) return;
+                } else if (type === 'date_range') {
+                    b.start = formData.get(`bo_start_${idAttr}`);
+                    b.end = formData.get(`bo_end_${idAttr}`);
+                    if (!b.start || !b.end) return;
+                }
+                blockouts.push(b);
+            });
             if (id) {
                 // Update
                 const p = state.professionals.find(prof => prof.id === id);
@@ -1667,11 +1841,53 @@
                 p.image = image;
                 p.serviceIds = serviceIds;
                 p.availability = { schedule, blockouts };
+
+                this.closeModal();
+                this.showNotification('Profesional actualizado correctamente');
+                this.renderProfessionalsManagement();
             } else {
-                // Create
+                // Create New Professional AND User
+                const userEmail = formData.get('userEmail');
+                const userPassword = formData.get('userPassword');
+
+                if (!userEmail || !userPassword) {
+                    alert('El email y la contraseña son obligatorios.');
+                    return;
+                }
+
+                // 1. Create User via non-persisting dummy client (so Admin is not logged out)
+                const dummyClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                    auth: { persistSession: false, autoRefreshToken: false }
+                });
+
+                const { data: authData, error: authError } = await dummyClient.auth.signUp({
+                    email: userEmail,
+                    password: userPassword,
+                    options: { data: { role: 'professional', name: name } }
+                });
+
+                if (authError) {
+                    alert('Error creando cuenta en el servidor: ' + authError.message);
+                    return;
+                }
+
+                const newUserId = authData.user?.id;
+
+                if (newUserId) {
+                    // 2. Insert into 'profiles' globally
+                    await supabase.from('profiles').upsert({
+                        id: newUserId,
+                        email: userEmail,
+                        name: name,
+                        role: 'professional'
+                    });
+                }
+
+                // 3. Push to state (local memory for this prototype, although ideally it's pushed to a professionals table too)
                 const newId = Date.now();
                 state.professionals.push({
                     id: newId,
+                    user_id: newUserId, // Link to auth
                     name,
                     specialty,
                     bio,
@@ -1680,11 +1896,13 @@
                     active: true,
                     availability: { schedule, blockouts }
                 });
-            }
 
-            this.closeModal();
-            this.showNotification('Profesional guardado correctamente');
-            this.renderProfessionalsManagement();
+                this.closeModal();
+                this.renderProfessionalsManagement();
+                
+                // Show crucial alert with the credentials!
+                alert(`¡Profesional Creado Exitosamente!\n\nPor favor envía estos datos al profesional:\n\nEmail: ${userEmail}\nContraseña: ${userPassword}`);
+            }
         },
 
         openServiceModal(serviceId = null) {
@@ -2514,7 +2732,7 @@
 
                 if (prof && prof.availability) {
                     // Check Blockouts
-                    if (prof.availability.blockouts && prof.availability.blockouts.includes(dateStr)) {
+                    if (this.isDateFullyBlocked(prof.availability.blockouts, dateStr)) {
                         dayGrid += `<div style="padding: 2rem; text-align: center; background: #fff1f2; color: #be123c;">
                             Profesional no disponible en esta fecha (Día Bloqueado/Vacaciones).
                         </div>`;
@@ -2570,6 +2788,11 @@
                                     const eH = parseInt(end.split(':')[0]);
                                     return h >= sH && h < eH;
                                 });
+                            }
+                            
+                            // Apply time-specific blockouts (slots are 60m blocks in this view)
+                            if (isWorkingHour && this.isTimeBlocked(prof.availability.blockouts, dateStr, h * 60, 60)) {
+                                isWorkingHour = false;
                             }
                         }
 
@@ -3510,6 +3733,100 @@
                 this.closeModal();
                 onConfirm();
             };
+        },
+
+        renderSettings() {
+            const main = document.getElementById('main-content');
+            main.innerHTML = `
+            <section class="section" style="background:#f8fafc; min-height:80vh;">
+                <div class="container" style="max-width: 800px;">
+                    <div class="header-action" style="margin-bottom: 2rem;">
+                        <h2>Configuración del Sistema</h2>
+                        <p style="color: #64748b;">Administra las preferencias generales y visuales de tu clínica.</p>
+                    </div>
+
+                    <form id="settings-form" style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);" onsubmit="turnoApp.saveSettings(event)">
+                        <h3 style="margin-bottom: 1.5rem; color: var(--primary-dark); border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem;">Información Institucional</h3>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                            <div class="form-group">
+                                <label class="form-label">Nombre de la Clínica / Estudio</label>
+                                <input type="text" name="clinicName" class="form-input" value="${state.settings.clinicName}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Email de Contacto</label>
+                                <input type="email" name="email" class="form-input" value="${state.settings.email}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Teléfono Público</label>
+                                <input type="text" name="phone" class="form-input" value="${state.settings.phone}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Dirección Local</label>
+                                <input type="text" name="address" class="form-input" value="${state.settings.address}">
+                            </div>
+                        </div>
+
+                         <h3 style="margin-top: 2.5rem; margin-bottom: 1.5rem; color: var(--primary-dark); border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem;">Preferencias Visuales y Monetarias</h3>
+                         
+                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                             <div class="form-group">
+                                <label class="form-label">Moneda Predeterminada</label>
+                                <select name="currency" class="form-select">
+                                    <option value="ARS" ${state.settings.currency === 'ARS' ? 'selected' : ''}>Pesos Argentinos (ARS)</option>
+                                    <option value="USD" ${state.settings.currency === 'USD' ? 'selected' : ''}>Dólares (USD)</option>
+                                    <option value="EUR" ${state.settings.currency === 'EUR' ? 'selected' : ''}>Euros (EUR)</option>
+                                    <option value="CLP" ${state.settings.currency === 'CLP' ? 'selected' : ''}>Pesos Chilenos (CLP)</option>
+                                </select>
+                            </div>
+                             <div class="form-group">
+                                <label class="form-label">Color de Marca (Acento)</label>
+                                <div style="display:flex; gap: 1rem; align-items:center;">
+                                    <input type="color" name="primaryColor" value="${state.settings.primaryColor}" style="width: 50px; height: 40px; padding:0; border:1px solid #ccc; border-radius:4px; cursor:pointer;" onchange="document.documentElement.style.setProperty('--primary', this.value);">
+                                    <span style="font-size:0.8rem; color:#666;">Impacta a botones, calendarios y menús al instante.</span>
+                                </div>
+                            </div>
+                         </div>
+
+                         <hr style="margin: 2.5rem 0; border: 0; border-top: 1px solid #e2e8f0;">
+                         
+                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: #fff1f2; border: 1px dashed #fecdd3; border-radius: 8px;">
+                             <div>
+                                <h4 style="margin:0; color:#e11d48;">Mantenimiento y Recuperación</h4>
+                                <p style="margin:0; font-size:0.85rem; color:#be123c;">Usa esta opción si los usuarios de prueba han perdido los permisos.</p>
+                             </div>
+                             <button type="button" class="btn-secondary" style="border-color:#e11d48; color:#be123c; background: transparent;" onclick="turnoApp.setupDemoUsers()">Restablecer Usuarios Demo</button>
+                         </div>
+                         
+                         <div style="margin-top: 2rem; text-align: right; display:flex; gap:1rem; justify-content: flex-end;">
+                            <button type="submit" class="btn-primary" style="padding-left:2.5rem; padding-right:2.5rem;">Guardar Configuración</button>
+                         </div>
+                    </form>
+                </div>
+            </section>
+            `;
+        },
+
+        saveSettings(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            
+            state.settings.clinicName = formData.get('clinicName');
+            state.settings.email = formData.get('email');
+            state.settings.phone = formData.get('phone');
+            state.settings.address = formData.get('address');
+            state.settings.currency = formData.get('currency');
+            state.settings.primaryColor = formData.get('primaryColor');
+            
+            localStorage.setItem('lumina_clinic_settings', JSON.stringify(state.settings));
+            
+            // Re-apply immediately safely
+            document.documentElement.style.setProperty('--primary', state.settings.primaryColor);
+            this.updateBranding();
+            
+            this.showNotification('Configuración guardada exitosamente.');
+            this.renderSidebar(); // refresh sidebar titles if affected by any variable
+            this.renderSettings(); // re-render the settings page so inputs match exactly what's saved
         },
 
         cancelBooking(id) {
