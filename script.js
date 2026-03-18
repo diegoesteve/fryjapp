@@ -10,6 +10,8 @@
         services: [], // Will be fetched from DB
         professionals: [], // Will be fetched from DB
         bookings: [], // Will be fetched from DB
+        inventoryProducts: [], // Will be fetched from DB
+        inventoryRequests: [], // Will be fetched from DB
         currentUser: null, // Managed by Supabase Auth
         currentView: 'home',
         bookingFor: null,
@@ -64,8 +66,14 @@
                 // 2. Load Data in Parallel
                 await Promise.all([
                     this.fetchServices(),
-                    this.fetchProfessionals()
+                    this.fetchProfessionals(),
+                    this.fetchInventoryProducts()
                 ]);
+
+                // Also fetch requests if logged in
+                if (session) {
+                    await this.fetchInventoryRequests();
+                }
 
                 // 3. UI
                 this.renderHome();
@@ -141,6 +149,16 @@
                     image: p.image_url
                 }));
             }
+        },
+
+        async fetchInventoryProducts() {
+            const { data, error } = await supabase.from('inventory_products').select('*').order('name');
+            if (data) state.inventoryProducts = data;
+        },
+
+        async fetchInventoryRequests() {
+            const { data, error } = await supabase.from('inventory_requests').select('*, inventory_products(name), profiles:professional_id(name)').order('created_at', { ascending: false });
+            if (data) state.inventoryRequests = data;
         },
 
         navigate(view, params = null, pushState = true) {
@@ -219,6 +237,9 @@
                     break;
                 case 'professionals-management':
                     this.renderProfessionalsManagement();
+                    break;
+                case 'inventory':
+                    this.renderInventoryManagement();
                     break;
                 case 'settings':
                     this.renderSettings();
@@ -346,6 +367,7 @@
                 { id: 'patients', icon: 'users', label: 'Pacientes', role: ['admin', 'professional'] },
                 { id: 'services-management', icon: 'sparkles', label: 'Servicios', role: ['admin'] },
                 { id: 'professionals-management', icon: 'users-round', label: 'Profesionales', role: ['admin'] },
+                { id: 'inventory', icon: 'package', label: 'Inventario', role: ['admin', 'professional'] },
                 { id: 'reports', icon: 'bar-chart-3', label: 'Reportes', role: ['admin'] },
                 { id: 'settings', icon: 'settings', label: 'Configuración', role: ['admin'] }
             ];
@@ -3827,6 +3849,359 @@
             this.showNotification('Configuración guardada exitosamente.');
             this.renderSidebar(); // refresh sidebar titles if affected by any variable
             this.renderSettings(); // re-render the settings page so inputs match exactly what's saved
+        },
+
+        renderInventoryManagement() {
+            const main = document.getElementById('main-content');
+            const isAdmin = state.currentUser.role === 'admin';
+
+            let html = `
+            <section class="section">
+                <div class="container">
+                    <div class="header-action">
+                        <div>
+                            <h2>Gestión de Inventario</h2>
+                            <p>Control de stock y solicitudes de insumos.</p>
+                        </div>
+                        ${isAdmin ? '<button onclick="turnoApp.showProductModal()" class="btn-primary">Nuevo Producto</button>' : '<button onclick="turnoApp.showInventoryRequestModal()" class="btn-primary">Pedir Insumos</button>'}
+                    </div>
+            `;
+
+            if (isAdmin) {
+                // Admin View: Products Catalog + Requests
+                html += `
+                    <h3 style="margin-top:2rem; margin-bottom:1rem;">Catálogo y Stock Actual</h3>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Unidad</th>
+                                    <th>Stock Actual</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.inventoryProducts.map(p => `
+                                <tr>
+                                    <td><strong>${p.name}</strong><br><small style="color:#666;">${p.description || ''}</small></td>
+                                    <td>${p.unit_measure}</td>
+                                    <td>
+                                        <span class="status-badge ${p.current_stock <= p.min_stock_alert ? 'cancelled' : 'completed'}">
+                                            ${p.current_stock}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button onclick="turnoApp.showAdjustStockModal('${p.id}')" class="btn-icon" title="Ajustar Stock" style="color:var(--primary);"><i data-lucide="calculator"></i></button>
+                                        <button onclick="turnoApp.showProductModal('${p.id}')" class="btn-icon" title="Editar"><i data-lucide="edit"></i></button>
+                                    </td>
+                                </tr>
+                                `).join('')}
+                                ${state.inventoryProducts.length === 0 ? '<tr><td colspan="4" class="text-center">No hay productos registrados.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3 style="margin-top:3rem; margin-bottom:1rem;">Solicitudes de Profesionales</h3>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Profesional</th>
+                                    <th>Producto</th>
+                                    <th>Cant. Solicitada</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.inventoryRequests.map(r => `
+                                <tr>
+                                    <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                                    <td>${r.profiles ? r.profiles.name : 'N/A'}</td>
+                                    <td>${r.inventory_products ? r.inventory_products.name : 'Desconocido'}</td>
+                                    <td>${r.quantity}</td>
+                                    <td><span class="status-badge ${r.status === 'PENDING' ? 'pending' : (r.status === 'APPROVED' ? 'completed' : 'cancelled')}">${r.status}</span></td>
+                                    <td>
+                                        ${r.status === 'PENDING' ? `
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'APPROVED')" class="btn-icon" title="Aprobar" style="color:#10b981;"><i data-lucide="check-circle"></i></button>
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'REJECTED')" class="btn-icon" title="Rechazar" style="color:#ef4444;"><i data-lucide="x-circle"></i></button>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                                `).join('')}
+                                ${state.inventoryRequests.length === 0 ? '<tr><td colspan="6" class="text-center">No hay solicitudes recientes.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                // Professional View: My Requests
+                const myRequests = state.inventoryRequests.filter(r => r.professional_id === state.currentUser.id);
+                html += `
+                    <h3 style="margin-top:2rem; margin-bottom:1rem;">Mis Solicitudes</h3>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Estado</th>
+                                    <th>Respuesta Admin</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${myRequests.map(r => `
+                                <tr>
+                                    <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                                    <td>${r.inventory_products ? r.inventory_products.name : 'Desconocido'}</td>
+                                    <td>${r.quantity}</td>
+                                    <td><span class="status-badge ${r.status === 'PENDING' ? 'pending' : (r.status === 'APPROVED' ? 'completed' : 'cancelled')}">${r.status}</span></td>
+                                    <td>${r.admin_response || '-'}</td>
+                                </tr>
+                                `).join('')}
+                                ${myRequests.length === 0 ? '<tr><td colspan="5" class="text-center">No has solicitado insumos.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            html += `
+                </div>
+            </section>
+            `;
+            main.innerHTML = html;
+            this.updateIcons();
+        },
+
+        // --- INVENTORY LOGIC ---
+        showProductModal(productId = null) {
+            const product = productId ? state.inventoryProducts.find(p => p.id === productId) : null;
+            const content = `
+                <div class="modal-header">
+                    <h3>${product ? 'Editar Producto' : 'Nuevo Insumo / Producto'}</h3>
+                    <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
+                </div>
+                <div class="modal-tab-content">
+                    <form onsubmit="turnoApp.saveProduct(event, ${product ? `'${product.id}'` : null})">
+                        <div class="form-group">
+                            <label class="form-label">Nombre del Producto</label>
+                            <input type="text" name="name" class="form-input" required value="${product ? product.name : ''}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Descripción</label>
+                            <input type="text" name="description" class="form-input" value="${product ? (product.description || '') : ''}">
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Unidad de Medida</label>
+                                <input type="text" name="unit_measure" class="form-input" required value="${product ? product.unit_measure : 'unidades'}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Alerta de Stock (Mínimo)</label>
+                                <input type="number" name="min_stock_alert" class="form-input" required value="${product ? product.min_stock_alert : 5}" min="0">
+                            </div>
+                        </div>
+                        ${!product ? `<div class="form-group"><label class="form-label">Stock Inicial</label><input type="number" name="initial_stock" class="form-input" required value="0" min="0"></div>` : ''}
+                        
+                        <div style="margin-top:2rem; display:flex; justify-content:flex-end;">
+                            <button type="submit" class="btn-primary">Guardar Producto</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        async saveProduct(event, productId) {
+            event.preventDefault();
+            const form = event.target;
+            const payload = {
+                name: form.name.value,
+                description: form.description.value,
+                unit_measure: form.unit_measure.value,
+                min_stock_alert: parseFloat(form.min_stock_alert.value)
+            };
+
+            this.showNotification('Guardando...');
+            
+            if (productId) {
+                await supabase.from('inventory_products').update(payload).eq('id', productId);
+            } else {
+                payload.current_stock = parseFloat(form.initial_stock.value);
+                const { data, error } = await supabase.from('inventory_products').insert([payload]).select();
+                // If initial stock > 0, we should ideally log a movement. Simulating for MVP.
+                if (data && data.length > 0 && payload.current_stock > 0) {
+                    await supabase.from('inventory_movements').insert([{
+                        product_id: data[0].id,
+                        user_id: state.currentUser.id,
+                        movement_type: 'ADJUSTMENT',
+                        quantity: payload.current_stock,
+                        reason: 'Stock Inicial'
+                    }]);
+                }
+            }
+            
+            this.closeModal();
+            await this.fetchInventoryProducts();
+            this.renderInventoryManagement();
+            this.showNotification('Producto guardado correctamente.');
+        },
+
+        showAdjustStockModal(productId) {
+            const product = state.inventoryProducts.find(p => p.id === productId);
+            const content = `
+                <div class="modal-header">
+                    <h3>Ajuste Rápido de Stock</h3>
+                    <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
+                </div>
+                <div style="padding:1rem;">
+                    <p style="margin-bottom:1rem;">Ajuste manual para <strong>${product.name}</strong>. Mueve las unidades sumando o restando (ej. para descontar por caducidad o sumar compra omitida).</p>
+                    <form onsubmit="turnoApp.saveStockAdjustment(event, '${productId}')">
+                        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Cantidad a modificar</label>
+                                <input type="number" name="adj_quantity" class="form-input" required placeholder="Ej: 5 o -2">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Motivo (para Auditoría)</label>
+                                <input type="text" name="reason" class="form-input" required placeholder="Ej: Vencimiento, Compra manual...">
+                            </div>
+                        </div>
+                        <div style="margin-top:1.5rem; text-align:right;">
+                            <button type="submit" class="btn-primary">Registrar Movimiento</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        async saveStockAdjustment(event, productId) {
+            event.preventDefault();
+            const qty = parseFloat(event.target.adj_quantity.value);
+            const reason = event.target.reason.value;
+            
+            if (qty === 0) return this.closeModal();
+
+            const product = state.inventoryProducts.find(p => p.id === productId);
+            if (product.current_stock + qty < 0) {
+                return alert('Error: El stock resultante no puede ser negativo.');
+            }
+
+            this.showNotification('Registrando...');
+            
+            // 1. Log Movement
+            const { error: logError } = await supabase.from('inventory_movements').insert([{
+                product_id: productId,
+                user_id: state.currentUser.id,
+                movement_type: 'ADJUSTMENT',
+                quantity: qty,
+                reason: reason
+            }]);
+
+            if (!logError) {
+                // 2. Update Stock
+                await supabase.from('inventory_products').update({
+                    current_stock: product.current_stock + qty
+                }).eq('id', productId);
+                
+                await this.fetchInventoryProducts();
+                this.renderInventoryManagement();
+                this.closeModal();
+                this.showNotification('Stock actualizado.');
+            } else {
+                alert('Hubo un error al registrar el movimiento.');
+            }
+        },
+
+        showInventoryRequestModal() {
+            const content = `
+                <div class="modal-header">
+                    <h3>Solicitar Insumo</h3>
+                    <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
+                </div>
+                <div class="modal-tab-content">
+                    <form onsubmit="turnoApp.saveInventoryRequest(event)">
+                        <div class="form-group">
+                            <label class="form-label">Seleccionar Insumo</label>
+                            <select name="product_id" class="form-select" required>
+                                ${state.inventoryProducts.map(p => `<option value="${p.id}">${p.name} (${p.unit_measure})</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Cantidad Solicitada</label>
+                            <input type="number" name="quantity" class="form-input" required value="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Comentarios (Opcional)</label>
+                            <textarea name="comments" class="form-input" rows="3" placeholder="Ej: Para los turnos del próximo viernes..."></textarea>
+                        </div>
+                        
+                        <div style="margin-top:2rem; text-align:right;">
+                            <button type="submit" class="btn-primary">Enviar Solicitud</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        async saveInventoryRequest(event) {
+            event.preventDefault();
+            const payload = {
+                professional_id: state.currentUser.id,
+                product_id: event.target.product_id.value,
+                quantity: parseFloat(event.target.quantity.value),
+                comments: event.target.comments.value
+            };
+
+            this.showNotification('Enviando...');
+            const { error } = await supabase.from('inventory_requests').insert([payload]);
+            if (!error) {
+                await this.fetchInventoryRequests();
+                this.renderInventoryManagement();
+                this.closeModal();
+                this.showNotification('Solicitud enviada al administrador.');
+            } else {
+                alert('No se pudo enviar la solicitud.');
+            }
+        },
+
+        async updateRequestStatus(reqId, newStatus) {
+            const req = state.inventoryRequests.find(r => r.id === reqId);
+            if (!req) return;
+
+            if (newStatus === 'APPROVED') {
+                const product = state.inventoryProducts.find(p => p.id === req.product_id);
+                if (!product || product.current_stock < req.quantity) {
+                    return alert('¡Atención! No hay stock suficiente para aprobar esta solicitud. Recházala o ajusta el stock primero.');
+                }
+
+                // If approved, deduct stock
+                await supabase.from('inventory_products').update({ current_stock: product.current_stock - req.quantity }).eq('id', req.product_id);
+                
+                // Log movement
+                await supabase.from('inventory_movements').insert([{
+                    product_id: req.product_id,
+                    user_id: state.currentUser.id,
+                    movement_type: 'OUT',
+                    quantity: -req.quantity,
+                    reason: `Entrega a profesional: ${req.profiles?.name}`,
+                    reference_id: req.id
+                }]);
+            }
+
+            this.showNotification('Procesando...');
+            await supabase.from('inventory_requests').update({ status: newStatus }).eq('id', reqId);
+            
+            await this.fetchInventoryProducts();
+            await this.fetchInventoryRequests();
+            this.renderInventoryManagement();
+            this.showNotification('Estado actualizado.');
         },
 
         cancelBooking(id) {
