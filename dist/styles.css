@@ -799,25 +799,186 @@ h4 {
 .dot {
     width: 8px;
     height: 8px;
-    background: var(--primary);
-    /* fallback */
-    background: #3b82f6;
     border-radius: 50%;
     display: inline-block;
 }
 
 .dot.plus {
-    background: #94a3b8;
-    color: white;
-    font-size: 8px;
+    background: transparent;
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 8px;
+    margin-left: 2px;
+}
+
+/* Enhancements based on Implementation Plan */
+
+/* 1. Filter Bar Enhancements */
+.filters-bar {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(12px);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    margin-bottom: 2rem;
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    align-items: flex-end; 
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    transition: all 0.3s ease;
+}
+
+.filters-bar:hover {
+    box-shadow: 0 8px 30px rgba(0, 168, 232, 0.08);
+}
+
+.filter-group {
+    flex: 1;
+    min-width: 180px;
+}
+
+.filter-label {
+    display: block;
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    color: var(--secondary-light);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-select {
+    width: 100%;
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--text-main);
+    background-color: var(--bg-white);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1em;
+}
+
+.filter-select:hover {
+    border-color: var(--primary-light);
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 168, 232, 0.15);
+}
+
+.btn-filter-clear {
+    height: 42px;
+    padding: 0 1.25rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-filter-clear:hover {
+    background: #f1f5f9;
+    color: #ef4444; /* Soft red for clear action */
+    border-color: #fca5a5;
+}
+
+/* 2. Calendar Enhancements */
+.calendar-grid {
+    border-top: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden; /* So borders curve with the grid */
+}
+
+.calendar-day {
+    min-height: 120px; /* Taller cells for more air */
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 0.75rem;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.calendar-day:hover {
+    background: #f8fafc;
+    box-shadow: inset 0 0 0 1px var(--primary-light);
+}
+
+.calendar-day.empty {
+    background: #f8fafc;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.calendar-day.today {
+    background: #f0f9ff;
+    box-shadow: inset 0 0 0 2px var(--primary); /* Stronger highlight for today */
+}
+
+.calendar-day.today .day-number {
+    color: var(--primary);
+    font-weight: 800;
+}
+
+.day-number {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 0.75rem;
+    display: inline-block;
+}
+
+/* Enhanced Booking Pills */
+.day-booking-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.day-booking-pill:hover {
+    transform: translateX(2px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .day-count {
     font-size: 0.75rem;
-    color: #64748b;
+    font-weight: 600;
+    color: var(--primary);
+    margin-top: 6px;
+    text-align: center;
+    background: var(--primary-light);
+    border-radius: 12px;
+    padding: 2px 0;
 }
 
 /* Infinite Scroll Loader */

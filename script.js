@@ -54,6 +54,10 @@
                 if (localSettings) {
                     state.settings = { ...state.settings, ...JSON.parse(localSettings) };
                 }
+                const localPatients = localStorage.getItem('lumina_patients');
+                if (localPatients) {
+                    state.patients = JSON.parse(localPatients);
+                }
                 document.documentElement.style.setProperty('--primary', state.settings.primaryColor);
                 this.updateBranding();
 
@@ -1277,6 +1281,59 @@
             document.getElementById(`btn-${channel}`).classList.add('active');
         },
 
+        getPatientProfessionalsDisplay(p) {
+            if (!p.assignedProfessionalIds || p.assignedProfessionalIds.length === 0) {
+                 return '<span style="color:#94a3b8; font-style:italic;">Sin asignar</span>';
+            }
+            const names = p.assignedProfessionalIds.map(id => {
+                const prof = state.professionals.find(pr => pr.id === id);
+                return prof ? prof.name.split(' ')[0] : 'Desconocido';
+            }).join(', ');
+            return names;
+        },
+
+        openAssignProfessionalModal(email) {
+            const p = state.patients.find(pt => pt.email === email);
+            if (!p) return;
+            
+            const content = `
+                <div class="modal-header">
+                    <h3>Asignar Profesionales a ${p.name}</h3>
+                </div>
+                <form onsubmit="turnoApp.savePatientProfessionals(event, '${email}')">
+                    <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        ${state.professionals.map(prof => `
+                            <label style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" name="assign_prof" value="${prof.id}" ${p.assignedProfessionalIds && p.assignedProfessionalIds.includes(prof.id) ? 'checked' : ''}>
+                                <span>${prof.name} <small style="color:#999">(${prof.specialty})</small></span>
+                            </label>
+                        `).join('')}
+                    </div>
+                    <div style="text-align: right;">
+                        <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary" style="margin-right: 0.5rem;">Cancelar</button>
+                        <button type="submit" class="btn-primary">Guardar Asignación</button>
+                    </div>
+                </form>
+            `;
+            this.openModal(content);
+        },
+
+        savePatientProfessionals(e, email) {
+            e.preventDefault();
+            const p = state.patients.find(pt => pt.email === email);
+            if (!p) return;
+
+            const form = e.target;
+            const checked = Array.from(form.querySelectorAll('input[name="assign_prof"]:checked')).map(cb => parseInt(cb.value));
+
+            p.assignedProfessionalIds = checked;
+            localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
+            
+            this.closeModal();
+            this.showNotification('Asignación de profesionales actualizada');
+            this.renderPatients();
+        },
+
         // ENH-26/27: Patient Management
         renderPatients() {
             const main = document.getElementById('main-content');
@@ -2172,19 +2229,51 @@
         `);
         },
 
-        createPatient(e, form) {
+        async createPatient(e, form) {
             e.preventDefault();
             const name = form.name.value;
             const email = form.email.value;
             const phone = form.phone.value;
 
             if (state.patients.find(u => u.email === email)) {
-                alert('Este email ya está registrado en el sistema.');
+                alert('Este email ya está localmente registrado en el sistema.');
                 return;
             }
 
-            // 1. Create Patient Record
+            // Create User via non-persisting dummy client (so Admin is not logged out)
+            const dummyClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: { persistSession: false, autoRefreshToken: false }
+            });
+
+            const userPassword = Math.random().toString(36).slice(-8);
+
+            const { data: authData, error: authError } = await dummyClient.auth.signUp({
+                email: email,
+                password: userPassword,
+                options: { data: { role: 'patient', name: name } }
+            });
+
+            if (authError) {
+                alert('Error creando cuenta en el servidor (Posible Email Duplicado): ' + authError.message);
+                return;
+            }
+
+            const newUserId = authData.user?.id;
+
+            if (newUserId) {
+                // Insert into 'profiles' globally
+                await supabase.from('profiles').upsert({
+                    id: newUserId,
+                    email: email,
+                    name: name,
+                    phone: phone,
+                    role: 'patient'
+                });
+            }
+
+            // 1. Create Patient Record Locally
             const newPatient = {
+                id: newUserId,
                 name,
                 email,
                 phone,
@@ -2195,8 +2284,11 @@
             localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
 
             this.closeModal();
-            this.showNotification('Paciente creado correctamente');
+            this.showNotification('Paciente creado y guardado en base de datos');
             this.renderPatients(); // Refresh list
+            
+            // Show alert with credentials
+            alert(`¡Paciente Creado Exitosamente!\n\nSe ha guardado en la base de datos central.\n\nEmail: ${email}\nContraseña temporal: ${userPassword}\n\nComunícale esta contraseña si desea ingresar a reservar turnos.`);
         },
 
         renderPatientProfile(email) {

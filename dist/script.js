@@ -10,6 +10,8 @@
         services: [], // Will be fetched from DB
         professionals: [], // Will be fetched from DB
         bookings: [], // Will be fetched from DB
+        inventoryProducts: [], // Will be fetched from DB
+        inventoryRequests: [], // Will be fetched from DB
         currentUser: null, // Managed by Supabase Auth
         currentView: 'home',
         bookingFor: null,
@@ -23,7 +25,15 @@
         serviceFilters: { status: '', category: '', professionalId: '' },
         agendaView: { viewMode: 'month', calendarMonth: new Date().getMonth(), calendarYear: new Date().getFullYear(), selectedDay: new Date() },
         visibleServicesCount: 4,
-        isLoading: false
+        isLoading: false,
+        settings: {
+            clinicName: 'JuliEsteve Salud',
+            email: 'contacto@juliestevesalud.com',
+            phone: '+54 11 1234-5678',
+            address: 'Av. Corrientes 1234, CABA',
+            currency: 'ARS',
+            primaryColor: '#8b5cf6'
+        }
     };
 
     // App Logic
@@ -39,6 +49,18 @@
                 // Initialize global client
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+                // 0.5 Load Settings from LocalStorage & Apply Theme
+                const localSettings = localStorage.getItem('lumina_clinic_settings');
+                if (localSettings) {
+                    state.settings = { ...state.settings, ...JSON.parse(localSettings) };
+                }
+                const localPatients = localStorage.getItem('lumina_patients');
+                if (localPatients) {
+                    state.patients = JSON.parse(localPatients);
+                }
+                document.documentElement.style.setProperty('--primary', state.settings.primaryColor);
+                this.updateBranding();
+
                 // 1. Check Session
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session) {
@@ -48,8 +70,14 @@
                 // 2. Load Data in Parallel
                 await Promise.all([
                     this.fetchServices(),
-                    this.fetchProfessionals()
+                    this.fetchProfessionals(),
+                    this.fetchInventoryProducts()
                 ]);
+
+                // Also fetch requests if logged in
+                if (session) {
+                    await this.fetchInventoryRequests();
+                }
 
                 // 3. UI
                 this.renderHome();
@@ -125,6 +153,21 @@
                     image: p.image_url
                 }));
             }
+        },
+
+        async fetchInventoryProducts() {
+            const { data, error } = await supabase.from('products').select('*, stock:inventory_stock(*)').order('name');
+            if (data) {
+                state.inventoryProducts = data.map(p => ({
+                    ...p,
+                    stock: p.stock && p.stock.length > 0 ? p.stock[0] : { total_quantity: 0, available_quantity: 0, reserved_quantity: 0 }
+                }));
+            }
+        },
+
+        async fetchInventoryRequests() {
+            const { data, error } = await supabase.from('inventory_orders').select('*, profiles:professional_id(name), items:inventory_order_items(*, product:products(name, unit_type))').order('created_at', { ascending: false });
+            if (data) state.inventoryRequests = data;
         },
 
         navigate(view, params = null, pushState = true) {
@@ -204,6 +247,12 @@
                 case 'professionals-management':
                     this.renderProfessionalsManagement();
                     break;
+                case 'inventory':
+                    this.renderInventoryManagement();
+                    break;
+                case 'settings':
+                    this.renderSettings();
+                    break;
                 default:
                     this.renderHome();
             }
@@ -249,6 +298,15 @@
             state.bookingFor = null;
             this.navigate('home');
             this.updateNav();
+            this.renderSidebar();
+        },
+
+        // Helper to format service prices across the app
+        formatServicePrice(service) {
+            if (service.priceType === 'variable' && service.priceRange) {
+                return service.priceRange;
+            }
+            return '$' + (service.price || 0);
         },
 
         forgotPassword() {
@@ -318,6 +376,7 @@
                 { id: 'patients', icon: 'users', label: 'Pacientes', role: ['admin', 'professional'] },
                 { id: 'services-management', icon: 'sparkles', label: 'Servicios', role: ['admin'] },
                 { id: 'professionals-management', icon: 'users-round', label: 'Profesionales', role: ['admin'] },
+                { id: 'inventory', icon: 'package', label: 'Inventario', role: ['admin', 'professional'] },
                 { id: 'reports', icon: 'bar-chart-3', label: 'Reportes', role: ['admin'] },
                 { id: 'settings', icon: 'settings', label: 'Configuración', role: ['admin'] }
             ];
@@ -435,8 +494,18 @@
 
         updateIcons() {
             if (window.lucide) {
-                lucide.createIcons();
+                window.lucide.createIcons();
             }
+        },
+
+        updateBranding() {
+            document.title = `${state.settings.clinicName} | Portal de Reservas`;
+            
+            const logoEl = document.querySelector('.logo');
+            if (logoEl) logoEl.innerHTML = `${state.settings.clinicName}<span>.</span>`;
+            
+            const footerText = document.querySelector('.footer p');
+            if (footerText) footerText.innerHTML = `&copy; ${new Date().getFullYear()} ${state.settings.clinicName}. Todos los derechos reservados.<br><br>📍 ${state.settings.address} | ✉ ${state.settings.email} | 📞 ${state.settings.phone}`;
         },
 
         showNotification(message) {
@@ -666,7 +735,7 @@
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2rem;">
                                 <span style="color: #666;">Precio Estimado</span>
-                                <strong style="font-size: 1.25rem; color: var(--primary-dark);">${service.priceRange || '$' + service.price}</strong>
+                                <strong style="font-size: 1.25rem; color: var(--primary-dark);">${turnoApp.formatServicePrice(service)}</strong>
                             </div>
                             
                             <button onclick="turnoApp.startBooking(${service.id})" class="btn-primary" style="width: 100%; text-align: center; justify-content: center; padding: 1rem;">
@@ -770,7 +839,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
                     <div>
                         <span style="display:block; font-size: 0.8rem; color: #999;">Precio estimado</span>
-                        <span style="font-weight: 600; color: var(--primary-dark);">${service.priceRange || '$' + service.price}</span>
+                        <span style="font-weight: 600; color: var(--primary-dark);">${turnoApp.formatServicePrice(service)}</span>
                     </div>
                     <span style="color: #999; font-size: 0.9rem;">${service.duration} min</span>
                 </div>
@@ -864,7 +933,7 @@
                                     ${state.services
                     .filter(s => state.professionals.some(p => p.serviceIds.includes(s.id)))
                     .map(s =>
-                        `<option value="${s.id}" ${s.id === defaultService ? 'selected' : ''}>${s.name} - $${s.price}</option>`
+                        `<option value="${s.id}" ${s.id === defaultService ? 'selected' : ''}>${s.name} - ${turnoApp.formatServicePrice(s)}</option>`
                     ).join('')}
                                 </select>
                             </div>
@@ -975,14 +1044,33 @@
             const service = state.services.find(s => s.id == serviceId);
             const duration = service.duration;
             const times = [];
-            const startTotalMinutes = 9 * 60; // 09:00
-            const endTotalMinutes = 18 * 60;  // 18:00
-            const lunchStart = 13 * 60;       // 13:00
-            const lunchEnd = 14 * 60;         // 14:00
+            
+            const prof = state.professionals.find(p => p.id == profId);
+            
+            if (prof && this.isDateFullyBlocked(prof.availability?.blockouts, date)) {
+                slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional se encuentra de vacaciones o no atiende este día completo.</p>';
+                return;
+            }
+
+            const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+            const schedule = prof?.availability?.schedule?.[dayName] || [];
+
+            if (schedule.length === 0) {
+                 slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional no atiende los días ' + new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }) + 's.</p>';
+                 return;
+            }
+
+            let minMin = 24 * 60;
+            let maxMin = 0;
+            schedule.forEach(r => {
+                const [s, e] = r.split('-');
+                minMin = Math.min(minMin, this.timeToMinutes(s));
+                maxMin = Math.max(maxMin, this.timeToMinutes(e));
+            });
 
             // Get existing bookings for this professional on this date
             const existingBookings = state.bookings.filter(b =>
-                b.professionalId == profId && b.date === date
+                b.professionalId == profId && b.date === date && b.status !== 'Cancelado'
             );
 
             // ENH-17: Filter past times
@@ -994,39 +1082,43 @@
                 selectedDate.getFullYear() === now.getFullYear();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-            for (let currentTime = startTotalMinutes; currentTime + duration <= endTotalMinutes; currentTime += duration) {
+            // Generate slots bounding minMin to maxMin
+            for (let currentTime = minMin; currentTime + duration <= maxMin; currentTime += duration) {
+                const slotEnd = currentTime + duration;
+                
+                // Check if slot falls ENTIRELY within ANY of the defined schedule ranges
+                const isWithinWorkingHours = schedule.some(range => {
+                    const [sTime, eTime] = range.split('-');
+                    const sMin = this.timeToMinutes(sTime);
+                    const eMin = this.timeToMinutes(eTime);
+                    return currentTime >= sMin && slotEnd <= eMin;
+                });
+
+                if (!isWithinWorkingHours) continue;
 
                 // Skip past times if today
                 if (isToday && currentTime <= currentMinutes) continue;
 
-                // Check if slot overlaps with lunch break
-                const slotEnd = currentTime + duration;
-                // Overlap logic: Start < LunchEnd AND End > LunchStart
-                const overlapsLunch = (currentTime < lunchEnd && slotEnd > lunchStart);
+                // Validate Blockouts (Specific Hours)
+                const isBlocked = this.isTimeBlocked(prof.availability?.blockouts, date, currentTime, duration);
 
                 // Booking overlap check
                 const isBooked = existingBookings.some(b => {
-                    const [bHour, bMin] = b.time.split(':').map(Number);
-                    const bStart = bHour * 60 + bMin;
-                    const bService = state.services.find(s => s.name === b.serviceName); // Fallback if no ID in old records
+                    const bStart = this.timeToMinutes(b.time);
+                    const bService = state.services.find(s => s.name === b.serviceName); 
                     const bDuration = bService ? bService.duration : 60;
                     const bEnd = bStart + bDuration;
-
-                    // Overlap: NewStart < ExistingEnd AND NewEnd > ExistingStart
                     return (currentTime < bEnd && slotEnd > bStart);
                 });
 
-                if (!overlapsLunch) {
-                    // Convert minutes back to HH:MM format
-                    const hours = Math.floor(currentTime / 60);
-                    const minutes = currentTime % 60;
-                    const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} `;
+                const hours = Math.floor(currentTime / 60);
+                const minutes = currentTime % 60;
+                const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} `;
 
-                    times.push({
-                        time: timeStr,
-                        available: !isBooked
-                    });
-                }
+                times.push({
+                    time: timeStr,
+                    available: !isBooked && !isBlocked
+                });
             }
 
             if (times.length === 0) {
@@ -1189,6 +1281,59 @@
             document.getElementById(`btn-${channel}`).classList.add('active');
         },
 
+        getPatientProfessionalsDisplay(p) {
+            if (!p.assignedProfessionalIds || p.assignedProfessionalIds.length === 0) {
+                 return '<span style="color:#94a3b8; font-style:italic;">Sin asignar</span>';
+            }
+            const names = p.assignedProfessionalIds.map(id => {
+                const prof = state.professionals.find(pr => pr.id === id);
+                return prof ? prof.name.split(' ')[0] : 'Desconocido';
+            }).join(', ');
+            return names;
+        },
+
+        openAssignProfessionalModal(email) {
+            const p = state.patients.find(pt => pt.email === email);
+            if (!p) return;
+            
+            const content = `
+                <div class="modal-header">
+                    <h3>Asignar Profesionales a ${p.name}</h3>
+                </div>
+                <form onsubmit="turnoApp.savePatientProfessionals(event, '${email}')">
+                    <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        ${state.professionals.map(prof => `
+                            <label style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" name="assign_prof" value="${prof.id}" ${p.assignedProfessionalIds && p.assignedProfessionalIds.includes(prof.id) ? 'checked' : ''}>
+                                <span>${prof.name} <small style="color:#999">(${prof.specialty})</small></span>
+                            </label>
+                        `).join('')}
+                    </div>
+                    <div style="text-align: right;">
+                        <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary" style="margin-right: 0.5rem;">Cancelar</button>
+                        <button type="submit" class="btn-primary">Guardar Asignación</button>
+                    </div>
+                </form>
+            `;
+            this.openModal(content);
+        },
+
+        savePatientProfessionals(e, email) {
+            e.preventDefault();
+            const p = state.patients.find(pt => pt.email === email);
+            if (!p) return;
+
+            const form = e.target;
+            const checked = Array.from(form.querySelectorAll('input[name="assign_prof"]:checked')).map(cb => parseInt(cb.value));
+
+            p.assignedProfessionalIds = checked;
+            localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
+            
+            this.closeModal();
+            this.showNotification('Asignación de profesionales actualizada');
+            this.renderPatients();
+        },
+
         // ENH-26/27: Patient Management
         renderPatients() {
             const main = document.getElementById('main-content');
@@ -1266,6 +1411,15 @@
             this.currentPatientList = visiblePatients;
         },
 
+        updateServiceFilter(key, value) {
+            if (key === 'clear') {
+                state.serviceFilters = { status: '', category: '', professionalId: '' };
+            } else {
+                state.serviceFilters[key] = value;
+            }
+            this.renderServicesManagement();
+        },
+
         // ENH-Services: Service Management
         renderServicesManagement() {
             const main = document.getElementById('main-content');
@@ -1305,31 +1459,31 @@
             </div>
 
             <!-- Service Filters -->
-            <div class="filters-bar" style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; border: 1px solid #e2e8f0;">
-                <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Estado</label>
-                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.status = this.value; turnoApp.renderServicesManagement()">
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <label class="filter-label">Estado</label>
+                    <select class="filter-select" onchange="turnoApp.updateServiceFilter('status', this.value)">
                         <option value="">Todos</option>
                         <option value="active" ${status === 'active' ? 'selected' : ''}>Activos</option>
                         <option value="inactive" ${status === 'inactive' ? 'selected' : ''}>Inactivos</option>
                     </select>
                 </div>
-                 <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Categoría</label>
-                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.category = this.value; turnoApp.renderServicesManagement()">
+                 <div class="filter-group">
+                    <label class="filter-label">Categoría</label>
+                    <select class="filter-select" onchange="turnoApp.updateServiceFilter('category', this.value)">
                         <option value="">Todas</option>
                         ${categories.map(cat => `<option value="${cat}" ${category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
                     </select>
                 </div>
-                <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Profesional Asignado</label>
-                    <select class="form-select" style="margin:0;" onchange="state.serviceFilters.professionalId = this.value; turnoApp.renderServicesManagement()">
+                <div class="filter-group">
+                    <label class="filter-label">Profesional Asignado</label>
+                    <select class="filter-select" onchange="turnoApp.updateServiceFilter('professionalId', this.value)">
                         <option value="">Todos</option>
                         ${state.professionals.map(p => `<option value="${p.id}" ${professionalId == p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                     </select>
                 </div>
-                 <button onclick="state.serviceFilters = { status: '', category: '', professionalId: '' }; turnoApp.renderServicesManagement()" class="btn-secondary" style="height: 38px; margin-top: 18px;">
-                     Limpiar
+                 <button onclick="turnoApp.updateServiceFilter('clear')" class="btn-filter-clear">
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Limpiar
                 </button>
             </div>
 
@@ -1357,7 +1511,7 @@
                                 <td><strong>${s.name}</strong></td>
                                 <td>${s.category}</td>
                                 <td>${s.duration} min</td>
-                                <td>$${s.price}</td>
+                                <td>${turnoApp.formatServicePrice(s)}</td>
                                 <td>
                                     <span class="status-badge ${s.active ? 'completado' : 'cancelado'}">
                                         ${s.active ? 'Activo' : 'Inactivo'}
@@ -1493,6 +1647,22 @@
                             <input type="text" name="image" class="form-input" value="${prof ? prof.image : ''}" placeholder="https://...">
                         </div>
                         
+                        ${!isEdit ? `
+                        <h4 style="margin-bottom: 0.5rem; margin-top: 1.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">Credenciales de Acceso</h4>
+                        <div class="form-group">
+                            <label class="form-label">Email de Acceso (Requerido)</label>
+                            <input type="email" name="userEmail" class="form-input" required value="">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Contraseña</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" name="userPassword" id="prof-password" class="form-input" required value="">
+                                <button type="button" class="btn-secondary" onclick="document.getElementById('prof-password').value = Math.random().toString(36).slice(-8);">Generar</button>
+                            </div>
+                            <p style="font-size: 0.8rem; color: #666; margin-top: 0.25rem;">Copia esta contraseña y el email para enviárselos al profesional.</p>
+                        </div>
+                        ` : ''}
+                        
                         <div class="form-group">
                             <label class="form-label">Servicios Asignados</label>
                             <div style="max-height: 150px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 0.5rem; border-radius: 6px;">
@@ -1508,25 +1678,79 @@
 
                     <!-- Availability Tab -->
                     <div id="modal-tab-availability" class="modal-tab-content" style="display: none;">
-                        <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">Configura los días y horarios de atención habituales. Formato: HH:MM-HH:MM. Separa múltiples rangos con coma.</p>
+                        <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">Usa los interruptores para activar los días que atiendes y configura tus turnos (el segundo turno es opcional).</p>
                         
                         ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
                 const dayMap = { 'Mon': 'Lunes', 'Tue': 'Martes', 'Wed': 'Miércoles', 'Thu': 'Jueves', 'Fri': 'Viernes', 'Sat': 'Sábado', 'Sun': 'Domingo' };
-                const ranges = availability.schedule[day] ? availability.schedule[day].join(', ') : '';
+                const ranges = availability.schedule[day] || [];
+                const isActive = ranges.length > 0;
+                
+                let start1 = '', end1 = '', start2 = '', end2 = '';
+                if (ranges[0]) {
+                    [start1, end1] = ranges[0].split('-');
+                }
+                if (ranges[1]) {
+                    [start2, end2] = ranges[1].split('-');
+                }
+
                 return `
-                                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                                    <div style="width: 80px; font-weight: 500;">${dayMap[day]}</div>
-                                    <input type="text" name="schedule_${day}" class="form-input" style="flex: 1;" value="${ranges}" placeholder="Ej: 09:00-13:00, 14:00-18:00 (Vacío = No atiende)">
+                    <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; background: ${isActive ? '#fff' : '#f8fafc'}; transition: all 0.2s;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: ${isActive ? '1rem' : '0'};">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer; color: ${isActive ? 'var(--primary-dark)' : '#94a3b8'};">
+                                <input type="checkbox" name="active_${day}" ${isActive ? 'checked' : ''} onchange="
+                                    const c = document.getElementById('config_${day}');
+                                    c.style.display = this.checked ? 'block' : 'none';
+                                    this.parentElement.style.color = this.checked ? 'var(--primary-dark)' : '#94a3b8';
+                                    this.parentElement.parentElement.parentElement.style.background = this.checked ? '#fff' : '#f8fafc';
+                                    this.parentElement.nextElementSibling.innerText = this.checked ? 'Atiende' : 'Descanso';
+                                    this.parentElement.nextElementSibling.style.color = this.checked ? 'var(--primary)' : '#94a3b8';
+                                    if(this.checked && !document.querySelector('[name=start1_${day}]').value) {
+                                        document.querySelector('[name=start1_${day}]').value = '09:00';
+                                        document.querySelector('[name=end1_${day}]').value = '18:00';
+                                    }
+                                " style="width: 18px; height: 18px;">
+                                ${dayMap[day]}
+                            </label>
+                            <span style="font-size:0.8rem; font-weight: 500; color: ${isActive ? 'var(--primary)' : '#94a3b8'};">${isActive ? 'Atiende' : 'Descanso'}</span>
+                        </div>
+                        
+                        <div id="config_${day}" style="display: ${isActive ? 'block' : 'none'};">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.5rem;">
+                                <div>
+                                    <label style="font-size: 0.8rem; color:#666; display:block; margin-bottom:0.25rem;">Turno 1 (Principal)</label>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                        <input type="time" name="start1_${day}" class="form-input" value="${start1}">
+                                        <span style="color:#999">-</span>
+                                        <input type="time" name="end1_${day}" class="form-input" value="${end1}">
+                                    </div>
                                 </div>
-                            `;
+                                <div>
+                                    <label style="font-size: 0.8rem; color:#666; display:block; margin-bottom:0.25rem;">Turno 2 (Opcional)</label>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                        <input type="time" name="start2_${day}" class="form-input" value="${start2}">
+                                        <span style="color:#999">-</span>
+                                        <input type="time" name="end2_${day}" class="form-input" value="${end2}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
             }).join('')}
 
                         <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid #e2e8f0;">
-                        
-                        <h4 style="margin-bottom: 0.5rem;">Días Bloqueados / Vacaciones</h4>
-                        <div class="form-group">
-                            <label class="form-label">Fechas (YYYY-MM-DD, separadas por coma)</label>
-                            <input type="text" name="blockouts" class="form-input" value="${availability.blockouts.join(', ')}" placeholder="Ej: 2024-12-25, 2025-01-01">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                            <h4 style="margin: 0;">Reglas de Excepción y Vacaciones</h4>
+                            <button type="button" class="btn-secondary" onclick="turnoApp.addBlockoutRow()" style="padding: 0.25rem 0.5rem; font-size:0.8rem;">+ Agregar Regla</button>
+                        </div>
+                        <div id="blockouts-container" style="display:flex; flex-direction:column; gap:0.5rem;">
+                            ${(Array.isArray(availability.blockouts) ? availability.blockouts : []).map((b, i) => {
+                                // Soporte para formato legacy de strings
+                                if (typeof b === 'string') {
+                                    b = { type: 'full_day', start: b };
+                                }
+                                return turnoApp.generateBlockoutRowHTML(b, i);
+                            }).join('')}
                         </div>
                     </div>
 
@@ -1539,11 +1763,90 @@
             this.openModal(content);
         },
 
+        timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const [h, m] = timeStr.split(':').map(Number);
+            return h * 60 + (m || 0);
+        },
+
+        isDateFullyBlocked(blockouts, dateStr) {
+            if (!blockouts || !Array.isArray(blockouts)) return false;
+            return blockouts.some(b => {
+                if (typeof b === 'string') return b === dateStr;
+                if (b.type === 'full_day' && b.start === dateStr) return true;
+                if (b.type === 'date_range' && dateStr >= b.start && dateStr <= b.end) return true;
+                return false;
+            });
+        },
+
+        isTimeBlocked(blockouts, dateStr, slotStartMin, slotDuration) {
+            if (!blockouts || !Array.isArray(blockouts)) return false;
+            const slotEndMin = slotStartMin + slotDuration;
+            
+            return blockouts.some(b => {
+                if (b.type === 'time_slot' && b.start === dateStr) {
+                    const bStartMin = this.timeToMinutes(b.startTime);
+                    const bEndMin = this.timeToMinutes(b.endTime);
+                    return slotStartMin < bEndMin && slotEndMin > bStartMin;
+                }
+                return false;
+            });
+        },
+
         switchModalTab(tabId) {
             document.querySelectorAll('.modal-tab-content').forEach(el => el.style.display = 'none');
             document.getElementById(`modal-tab-${tabId}`).style.display = 'block';
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`tab-btn-${tabId}`).classList.add('active');
+        },
+
+        generateBlockoutRowHTML(b = { type: 'full_day', start: '' }, index = Date.now()) {
+            return `
+            <div class="blockout-row" style="border: 1px solid #e2e8f0; border-radius:6px; padding: 0.75rem; background:#f8fafc; position:relative;" data-id="${index}">
+                <button type="button" onclick="this.closest('.blockout-row').remove()" style="position:absolute; right: 0.5rem; top: 0.5rem; background:none; border:none; color:#be123c; cursor:pointer;" title="Eliminar regla">✖</button>
+                <div style="display:grid; grid-template-columns: 1fr 2fr; gap:0.5rem; align-items:end;">
+                    <div>
+                        <label style="font-size:0.75rem; color:#666;">Tipo de Regla</label>
+                        <select name="bo_type_${index}" class="form-select" onchange="const row = this.closest('.blockout-row'); row.querySelector('.bo-date').style.display = this.value === 'date_range' ? 'none' : 'block'; row.querySelector('.bo-range').style.display = this.value === 'date_range' ? 'flex' : 'none'; row.querySelector('.bo-time').style.display = this.value === 'time_slot' ? 'flex' : 'none';" style="padding: 0.4rem;">
+                            <option value="full_day" ${b.type === 'full_day' ? 'selected' : ''}>Día Completo</option>
+                            <option value="date_range" ${b.type === 'date_range' ? 'selected' : ''}>Rango de Días</option>
+                            <option value="time_slot" ${b.type === 'time_slot' ? 'selected' : ''}>Horario Específico</option>
+                        </select>
+                    </div>
+                    <div class="bo-date" style="display: ${b.type !== 'date_range' ? 'block' : 'none'};">
+                        <label style="font-size:0.75rem; color:#666;">Fecha</label>
+                        <input type="date" name="bo_date_${index}" class="form-input" style="padding: 0.4rem;" value="${b.type !== 'date_range' ? b.start : ''}">
+                    </div>
+                    <div class="bo-range" style="display: ${b.type === 'date_range' ? 'flex' : 'none'}; gap:0.5rem;">
+                        <div style="flex:1;">
+                            <label style="font-size:0.75rem; color:#666;">Desde</label>
+                            <input type="date" name="bo_start_${index}" class="form-input" style="padding: 0.4rem;" value="${b.type === 'date_range' ? b.start : ''}">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:0.75rem; color:#666;">Hasta</label>
+                            <input type="date" name="bo_end_${index}" class="form-input" style="padding: 0.4rem;" value="${b.type === 'date_range' ? b.end : ''}">
+                        </div>
+                    </div>
+                </div>
+                <div class="bo-time" style="display: ${b.type === 'time_slot' ? 'flex' : 'none'}; gap:0.5rem; margin-top:0.5rem;">
+                     <div>
+                        <label style="font-size:0.75rem; color:#666;">Hora Inicio</label>
+                        <input type="time" name="bo_startTime_${index}" class="form-input" style="padding: 0.4rem;" value="${b.startTime || ''}">
+                     </div>
+                     <div>
+                        <label style="font-size:0.75rem; color:#666;">Hora Fin</label>
+                        <input type="time" name="bo_endTime_${index}" class="form-input" style="padding: 0.4rem;" value="${b.endTime || ''}">
+                     </div>
+                </div>
+            </div>
+            `;
+        },
+
+        addBlockoutRow() {
+            const container = document.getElementById('blockouts-container');
+            if(container) {
+                container.insertAdjacentHTML('beforeend', this.generateBlockoutRowHTML({type:'full_day', start:''}, Date.now() + Math.floor(Math.random() * 1000)));
+            }
         },
 
         toggleProfessionalStatus(id) {
@@ -1555,7 +1858,7 @@
             }
         },
 
-        saveProfessional(e, id) {
+        async saveProfessional(e, id) {
             e.preventDefault();
             const form = e.target;
             const formData = new FormData(form);
@@ -1573,16 +1876,46 @@
             // Gather Schedule
             const schedule = {};
             ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
-                const val = formData.get(`schedule_${day}`);
-                if (val && val.trim() !== '') {
-                    schedule[day] = val.split(',').map(s => s.trim());
+                const isActive = formData.get(`active_${day}`);
+                if (isActive) {
+                    const s1 = formData.get(`start1_${day}`);
+                    const e1 = formData.get(`end1_${day}`);
+                    const s2 = formData.get(`start2_${day}`);
+                    const e2 = formData.get(`end2_${day}`);
+                    
+                    const dayRanges = [];
+                    if (s1 && e1) dayRanges.push(`${s1}-${e1}`);
+                    if (s2 && e2) dayRanges.push(`${s2}-${e2}`);
+                    
+                    if (dayRanges.length > 0) {
+                        schedule[day] = dayRanges;
+                    }
                 }
             });
 
-            // Gather Blockouts
-            const blockoutsStr = formData.get('blockouts');
-            const blockouts = blockoutsStr ? blockoutsStr.split(',').map(s => s.trim()) : [];
-
+            // Gather Blockouts Advanced
+            const blockouts = [];
+            const blockoutRows = form.querySelectorAll('.blockout-row');
+            blockoutRows.forEach(row => {
+                const idAttr = row.getAttribute('data-id');
+                const type = formData.get(`bo_type_${idAttr}`);
+                const b = { type };
+                
+                if (type === 'full_day') {
+                    b.start = formData.get(`bo_date_${idAttr}`);
+                    if (!b.start) return; // Skip empty
+                } else if (type === 'time_slot') {
+                    b.start = formData.get(`bo_date_${idAttr}`);
+                    b.startTime = formData.get(`bo_startTime_${idAttr}`);
+                    b.endTime = formData.get(`bo_endTime_${idAttr}`);
+                    if (!b.start || !b.startTime || !b.endTime) return;
+                } else if (type === 'date_range') {
+                    b.start = formData.get(`bo_start_${idAttr}`);
+                    b.end = formData.get(`bo_end_${idAttr}`);
+                    if (!b.start || !b.end) return;
+                }
+                blockouts.push(b);
+            });
             if (id) {
                 // Update
                 const p = state.professionals.find(prof => prof.id === id);
@@ -1592,11 +1925,53 @@
                 p.image = image;
                 p.serviceIds = serviceIds;
                 p.availability = { schedule, blockouts };
+
+                this.closeModal();
+                this.showNotification('Profesional actualizado correctamente');
+                this.renderProfessionalsManagement();
             } else {
-                // Create
+                // Create New Professional AND User
+                const userEmail = formData.get('userEmail');
+                const userPassword = formData.get('userPassword');
+
+                if (!userEmail || !userPassword) {
+                    alert('El email y la contraseña son obligatorios.');
+                    return;
+                }
+
+                // 1. Create User via non-persisting dummy client (so Admin is not logged out)
+                const dummyClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                    auth: { persistSession: false, autoRefreshToken: false }
+                });
+
+                const { data: authData, error: authError } = await dummyClient.auth.signUp({
+                    email: userEmail,
+                    password: userPassword,
+                    options: { data: { role: 'professional', name: name } }
+                });
+
+                if (authError) {
+                    alert('Error creando cuenta en el servidor: ' + authError.message);
+                    return;
+                }
+
+                const newUserId = authData.user?.id;
+
+                if (newUserId) {
+                    // 2. Insert into 'profiles' globally
+                    await supabase.from('profiles').upsert({
+                        id: newUserId,
+                        email: userEmail,
+                        name: name,
+                        role: 'professional'
+                    });
+                }
+
+                // 3. Push to state (local memory for this prototype, although ideally it's pushed to a professionals table too)
                 const newId = Date.now();
                 state.professionals.push({
                     id: newId,
+                    user_id: newUserId, // Link to auth
                     name,
                     specialty,
                     bio,
@@ -1605,11 +1980,13 @@
                     active: true,
                     availability: { schedule, blockouts }
                 });
-            }
 
-            this.closeModal();
-            this.showNotification('Profesional guardado correctamente');
-            this.renderProfessionalsManagement();
+                this.closeModal();
+                this.renderProfessionalsManagement();
+                
+                // Show crucial alert with the credentials!
+                alert(`¡Profesional Creado Exitosamente!\n\nPor favor envía estos datos al profesional:\n\nEmail: ${userEmail}\nContraseña: ${userPassword}`);
+            }
         },
 
         openServiceModal(serviceId = null) {
@@ -1665,14 +2042,28 @@
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group">
-                    <label class="form-label">Precio ($)</label>
-                    <input type="number" name="price" class="form-input" value="${service ? service.price : ''}" required min="0">
+                    <label class="form-label">Tipo de Precio</label>
+                    <select class="form-select" name="priceType" onchange="document.getElementById('fixed-price-div').style.display = this.value === 'fixed' ? 'block' : 'none'; document.getElementById('var-price-div').style.display = this.value === 'variable' ? 'block' : 'none';">
+                        <option value="fixed" ${!service || service.priceType !== 'variable' ? 'selected' : ''}>Fijo</option>
+                        <option value="variable" ${service && service.priceType === 'variable' ? 'selected' : ''}>Variable / Estimado</option>
+                    </select>
                 </div>
                  <div class="form-group">
                     <label class="form-label">Icono (Lucide)</label>
                     <select name="icon" class="form-select">
                         ${icons.map(i => `<option value="${i.val}" ${service && service.icon === i.val ? 'selected' : ''}>${i.label}</option>`).join('')}
                     </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 0.5rem;">
+                <div id="fixed-price-div" style="display: ${!service || service.priceType !== 'variable' ? 'block' : 'none'};" class="form-group">
+                    <label class="form-label">Precio ($) (Referencia Base)</label>
+                    <input type="number" name="price" class="form-input" value="${service ? service.price : '0'}" min="0">
+                </div>
+                <div id="var-price-div" style="display: ${service && service.priceType === 'variable' ? 'block' : 'none'};" class="form-group">
+                    <label class="form-label">Detalle de Precio Variable (Ej: "Desde $15.000", "$10.000 - $20.000")</label>
+                    <input type="text" name="priceRange" class="form-input" value="${service && service.priceRange ? service.priceRange : ''}">
                 </div>
             </div>
 
@@ -1717,8 +2108,10 @@
             const serviceData = {
                 name: formData.get('name'),
                 category: formData.get('category'),
-                duration: parseInt(formData.get('duration')),
-                price: parseFloat(formData.get('price')),
+                duration: parseInt(formData.get('duration')) || 30,
+                price: parseFloat(formData.get('price')) || 0,
+                priceType: formData.get('priceType') || 'fixed',
+                priceRange: formData.get('priceRange') || '',
                 icon: formData.get('icon'),
                 description: formData.get('description'),
                 active: formData.get('active') === 'on'
@@ -1836,32 +2229,51 @@
         `);
         },
 
-        createPatient(e, form) {
+        async createPatient(e, form) {
             e.preventDefault();
             const name = form.name.value;
             const email = form.email.value;
             const phone = form.phone.value;
 
-            if (state.users.find(u => u.email === email)) {
-                alert('Este email ya está registrado en el sistema.');
+            if (state.patients.find(u => u.email === email)) {
+                alert('Este email ya está localmente registrado en el sistema.');
                 return;
             }
 
-            // 1. Create User
-            const newUser = {
-                email,
-                password: '123', // Default placeholder
-                name,
-                role: 'patient'
-            };
-            state.users.push(newUser);
-            // Persist users if we were using LS for them, but usually syncing happens via patients/visits. 
-            // For this demo, we'll assume state.users is enough or updated via app flow.
-            // Actually, let's sync users to LS for consistency in this demo app
-            // localStorage.setItem('lumina_users', JSON.stringify(state.users)); // Not strictly used by turnoApp.init but good for completeness
+            // Create User via non-persisting dummy client (so Admin is not logged out)
+            const dummyClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: { persistSession: false, autoRefreshToken: false }
+            });
 
-            // 2. Create Patient Record
+            const userPassword = Math.random().toString(36).slice(-8);
+
+            const { data: authData, error: authError } = await dummyClient.auth.signUp({
+                email: email,
+                password: userPassword,
+                options: { data: { role: 'patient', name: name } }
+            });
+
+            if (authError) {
+                alert('Error creando cuenta en el servidor (Posible Email Duplicado): ' + authError.message);
+                return;
+            }
+
+            const newUserId = authData.user?.id;
+
+            if (newUserId) {
+                // Insert into 'profiles' globally
+                await supabase.from('profiles').upsert({
+                    id: newUserId,
+                    email: email,
+                    name: name,
+                    phone: phone,
+                    role: 'patient'
+                });
+            }
+
+            // 1. Create Patient Record Locally
             const newPatient = {
+                id: newUserId,
                 name,
                 email,
                 phone,
@@ -1872,8 +2284,11 @@
             localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
 
             this.closeModal();
-            this.showNotification('Paciente creado correctamente');
+            this.showNotification('Paciente creado y guardado en base de datos');
             this.renderPatients(); // Refresh list
+            
+            // Show alert with credentials
+            alert(`¡Paciente Creado Exitosamente!\n\nSe ha guardado en la base de datos central.\n\nEmail: ${email}\nContraseña temporal: ${userPassword}\n\nComunícale esta contraseña si desea ingresar a reservar turnos.`);
         },
 
         renderPatientProfile(email) {
@@ -2094,8 +2509,15 @@
         },
 
         // ENH-25: Reports
-        // ENH-25: Reports
-        // ENH-25: Reports
+        updateReportFilter(key, value) {
+            if (key === 'clear') {
+                state.reportFilters = { startDate: '', endDate: '', professionalId: '' };
+            } else {
+                state.reportFilters[key] = value;
+            }
+            this.renderReports();
+        },
+
         renderReports() {
             const user = state.currentUser;
             // Allow Admin and Professional
@@ -2162,28 +2584,28 @@
                 }
 
                      <!-- Filters -->
-                    <div class="filters-bar" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label" style="font-size: 0.85rem;">Desde</label>
-                            <input type="date" class="form-input" value="${startDate}" onchange="state.reportFilters.startDate = this.value; turnoApp.renderReports()">
+                    <div class="filters-bar">
+                        <div class="filter-group">
+                            <label class="filter-label">Desde</label>
+                            <input type="date" class="filter-select" value="${startDate}" onchange="turnoApp.updateReportFilter('startDate', this.value)">
                         </div>
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label" style="font-size: 0.85rem;">Hasta</label>
-                            <input type="date" class="form-input" value="${endDate}" onchange="state.reportFilters.endDate = this.value; turnoApp.renderReports()">
+                        <div class="filter-group">
+                            <label class="filter-label">Hasta</label>
+                            <input type="date" class="filter-select" value="${endDate}" onchange="turnoApp.updateReportFilter('endDate', this.value)">
                         </div>
                         
                         ${isAdmin ? `
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label" style="font-size: 0.85rem;">Profesional</label>
-                            <select class="form-select" onchange="state.reportFilters.professionalId = this.value; turnoApp.renderReports()">
+                        <div class="filter-group">
+                            <label class="filter-label">Profesional</label>
+                            <select class="filter-select" onchange="turnoApp.updateReportFilter('professionalId', this.value)">
                                 <option value="">Todos</option>
                                 ${state.professionals.map(p => `<option value="${p.id}" ${p.id == professionalId ? 'selected' : ''}>${p.name}</option>`).join('')}
                             </select>
                         </div>
                         ` : ''}
 
-                        <button onclick="state.reportFilters = { startDate: '', endDate: '', professionalId: '' }; turnoApp.renderReports()" class="btn-secondary" style="height: 42px;">
-                            Limpiar Filtros
+                        <button onclick="turnoApp.updateReportFilter('clear')" class="btn-filter-clear">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Limpiar
                         </button>
                     </div>
 
@@ -2277,6 +2699,11 @@
             if (document.getElementById('filter-month')) {
                 state.adminFilters.month = document.getElementById('filter-month').value;
             }
+            this.renderAdmin();
+        },
+
+        clearAdminFilters() {
+            state.adminFilters = { professionalId: '', status: '', month: '' };
             this.renderAdmin();
         },
 
@@ -2424,7 +2851,7 @@
 
                 if (prof && prof.availability) {
                     // Check Blockouts
-                    if (prof.availability.blockouts && prof.availability.blockouts.includes(dateStr)) {
+                    if (this.isDateFullyBlocked(prof.availability.blockouts, dateStr)) {
                         dayGrid += `<div style="padding: 2rem; text-align: center; background: #fff1f2; color: #be123c;">
                             Profesional no disponible en esta fecha (Día Bloqueado/Vacaciones).
                         </div>`;
@@ -2480,6 +2907,11 @@
                                     const eH = parseInt(end.split(':')[0]);
                                     return h >= sH && h < eH;
                                 });
+                            }
+                            
+                            // Apply time-specific blockouts (slots are 60m blocks in this view)
+                            if (isWorkingHour && this.isTimeBlocked(prof.availability.blockouts, dateStr, h * 60, 60)) {
+                                isWorkingHour = false;
                             }
                         }
 
@@ -2711,19 +3143,19 @@
 
             // --- FILTER BAR (Dynamic based on role) ---
             let filterBarHTML = `
-            <div class="admin-filters">
+            <div class="filters-bar" style="margin-bottom: 2rem;">
                 ${user.role === 'admin' ? `
                 <div class="filter-group">
-                    <label>Profesional</label>
-                    <select id="filter-prof" onchange="turnoApp.applyAdminFilters()">
+                    <label class="filter-label">Profesional</label>
+                    <select id="filter-prof" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         ${state.professionals.map(p => `<option value="${p.id}" ${state.adminFilters.professionalId == p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                     </select>
                 </div>
                 ` : `
                 <div class="filter-group">
-                    <label>Profesional</label>
-                    <div style="padding: 0.5rem; background: #e2e8f0; border-radius: 4px; color: #64748b; font-size: 0.9rem;">
+                    <label class="filter-label">Profesional</label>
+                    <div style="padding: 0.6rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-main); font-size: 0.95rem;">
                         ${state.professionals.find(p => p.id === user.id)?.name || 'Tú'}
                         <input type="hidden" id="filter-prof" value="${user.id}">
                     </div>
@@ -2731,8 +3163,8 @@
                 `}
                 
                 <div class="filter-group">
-                    <label>Estado</label>
-                     <select id="filter-status" onchange="turnoApp.applyAdminFilters()">
+                    <label class="filter-label">Estado</label>
+                     <select id="filter-status" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         <option value="Pendiente" ${state.adminFilters.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
                         <option value="Confirmado" ${state.adminFilters.status === 'Confirmado' ? 'selected' : ''}>Confirmado</option>
@@ -2790,30 +3222,30 @@
 
             return `
             <!-- Filters Toolbar -->
-            <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: end; border: 1px solid #e2e8f0;">
-                <div style="flex: 1; min-width: 200px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Profesional</label>
-                    <select id="filter-prof" class="form-select" style="margin:0;" onchange="turnoApp.applyAdminFilters()">
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <label class="filter-label">Profesional</label>
+                    <select id="filter-prof" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         ${state.professionals.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                     </select>
                 </div>
-                 <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Estado</label>
-                    <select id="filter-status" class="form-select" style="margin:0;" onchange="turnoApp.applyAdminFilters()">
+                 <div class="filter-group">
+                    <label class="filter-label">Estado</label>
+                    <select id="filter-status" class="filter-select" onchange="turnoApp.applyAdminFilters()">
                         <option value="">Todos</option>
                         <option value="Confirmado">Confirmado</option>
                         <option value="Completado">Completado</option>
                         <option value="Cancelado">Cancelado</option>
                     </select>
                 </div>
-                <div style="flex: 1; min-width: 150px;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600; color: #64748b;">Mes</label>
-                    <input type="month" id="filter-month" class="form-input" style="margin:0;" value="${state.adminFilters.month}" onchange="turnoApp.applyAdminFilters()">
+                <div class="filter-group">
+                    <label class="filter-label">Mes</label>
+                    <input type="month" id="filter-month" class="filter-select" value="${state.adminFilters.month}" onchange="turnoApp.applyAdminFilters()">
                 </div>
-                <div style="display: flex; align-items: end;">
-                    <button onclick="state.adminFilters={professionalId:'',status:'',month:''}; turnoApp.renderAdmin()" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #666; cursor: pointer; text-decoration: underline;">Limpiar</button>
-                </div>
+                <button onclick="turnoApp.clearAdminFilters()" class="btn-filter-clear">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Limpiar
+                </button>
             </div>
 
             <div style="overflow-x: auto;">
@@ -2941,11 +3373,14 @@
                     <div class="day-content" onclick="turnoApp.showDayDetails('${dateStr}')" style="height: 100%;">
                         <div class="day-number">${d}</div>
                         ${dayBookings.length > 0 ? `
-                            <div class="day-indicators">
-                                ${dayBookings.slice(0, 3).map(b => `<span class="dot" title="${b.time} - ${b.serviceName}"></span>`).join('')}
-                                ${dayBookings.length > 3 ? '<span class="dot plus">+</span>' : ''}
+                            <div class="day-indicators" style="display:flex; flex-direction:column; gap:2px; margin-top:4px;">
+                                ${dayBookings.slice(0, 3).map(b => `
+                                    <div class="day-booking-pill" title="${b.time} - ${b.serviceName} con ${b.professionalName}">
+                                        ${b.time} ${b.clientName.split(' ')[0]}
+                                    </div>
+                                `).join('')}
                             </div>
-                            <div class="day-count">${dayBookings.length} turnos</div>
+                            ${dayBookings.length > 3 ? `<div class="day-count">+${dayBookings.length - 3} más</div>` : ''}
                         ` : ''}
                     </div>
                 </div>
@@ -2999,7 +3434,7 @@
         showAdminBookingModal(defaultDate = '', defaultTime = '', defaultProfId = '') {
             // Ensure data availability
             const patientsList = state.patients.map(p => `<option value="${p.email}">${p.name} (${p.email})</option>`).join('');
-            const servicesList = state.services.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - $${s.price}</option>`).join('');
+            const servicesList = state.services.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
             const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == defaultProfId ? 'selected' : ''}>${p.name}</option>`).join('');
 
             const content = `
@@ -3417,6 +3852,447 @@
                 this.closeModal();
                 onConfirm();
             };
+        },
+
+        renderSettings() {
+            const main = document.getElementById('main-content');
+            main.innerHTML = `
+            <section class="section" style="background:#f8fafc; min-height:80vh;">
+                <div class="container" style="max-width: 800px;">
+                    <div class="header-action" style="margin-bottom: 2rem;">
+                        <h2>Configuración del Sistema</h2>
+                        <p style="color: #64748b;">Administra las preferencias generales y visuales de tu clínica.</p>
+                    </div>
+
+                    <form id="settings-form" style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);" onsubmit="turnoApp.saveSettings(event)">
+                        <h3 style="margin-bottom: 1.5rem; color: var(--primary-dark); border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem;">Información Institucional</h3>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                            <div class="form-group">
+                                <label class="form-label">Nombre de la Clínica / Estudio</label>
+                                <input type="text" name="clinicName" class="form-input" value="${state.settings.clinicName}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Email de Contacto</label>
+                                <input type="email" name="email" class="form-input" value="${state.settings.email}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Teléfono Público</label>
+                                <input type="text" name="phone" class="form-input" value="${state.settings.phone}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Dirección Local</label>
+                                <input type="text" name="address" class="form-input" value="${state.settings.address}">
+                            </div>
+                        </div>
+
+                         <h3 style="margin-top: 2.5rem; margin-bottom: 1.5rem; color: var(--primary-dark); border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem;">Preferencias Visuales y Monetarias</h3>
+                         
+                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                             <div class="form-group">
+                                <label class="form-label">Moneda Predeterminada</label>
+                                <select name="currency" class="form-select">
+                                    <option value="ARS" ${state.settings.currency === 'ARS' ? 'selected' : ''}>Pesos Argentinos (ARS)</option>
+                                    <option value="USD" ${state.settings.currency === 'USD' ? 'selected' : ''}>Dólares (USD)</option>
+                                    <option value="EUR" ${state.settings.currency === 'EUR' ? 'selected' : ''}>Euros (EUR)</option>
+                                    <option value="CLP" ${state.settings.currency === 'CLP' ? 'selected' : ''}>Pesos Chilenos (CLP)</option>
+                                </select>
+                            </div>
+                             <div class="form-group">
+                                <label class="form-label">Color de Marca (Acento)</label>
+                                <div style="display:flex; gap: 1rem; align-items:center;">
+                                    <input type="color" name="primaryColor" value="${state.settings.primaryColor}" style="width: 50px; height: 40px; padding:0; border:1px solid #ccc; border-radius:4px; cursor:pointer;" onchange="document.documentElement.style.setProperty('--primary', this.value);">
+                                    <span style="font-size:0.8rem; color:#666;">Impacta a botones, calendarios y menús al instante.</span>
+                                </div>
+                            </div>
+                         </div>
+
+                         <hr style="margin: 2.5rem 0; border: 0; border-top: 1px solid #e2e8f0;">
+                         
+                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: #fff1f2; border: 1px dashed #fecdd3; border-radius: 8px;">
+                             <div>
+                                <h4 style="margin:0; color:#e11d48;">Mantenimiento y Recuperación</h4>
+                                <p style="margin:0; font-size:0.85rem; color:#be123c;">Usa esta opción si los usuarios de prueba han perdido los permisos.</p>
+                             </div>
+                             <button type="button" class="btn-secondary" style="border-color:#e11d48; color:#be123c; background: transparent;" onclick="turnoApp.setupDemoUsers()">Restablecer Usuarios Demo</button>
+                         </div>
+                         
+                         <div style="margin-top: 2rem; text-align: right; display:flex; gap:1rem; justify-content: flex-end;">
+                            <button type="submit" class="btn-primary" style="padding-left:2.5rem; padding-right:2.5rem;">Guardar Configuración</button>
+                         </div>
+                    </form>
+                </div>
+            </section>
+            `;
+        },
+
+        saveSettings(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            
+            state.settings.clinicName = formData.get('clinicName');
+            state.settings.email = formData.get('email');
+            state.settings.phone = formData.get('phone');
+            state.settings.address = formData.get('address');
+            state.settings.currency = formData.get('currency');
+            state.settings.primaryColor = formData.get('primaryColor');
+            
+            localStorage.setItem('lumina_clinic_settings', JSON.stringify(state.settings));
+            
+            // Re-apply immediately safely
+            document.documentElement.style.setProperty('--primary', state.settings.primaryColor);
+            this.updateBranding();
+            
+            this.showNotification('Configuración guardada exitosamente.');
+            this.renderSidebar(); // refresh sidebar titles if affected by any variable
+            this.renderSettings(); // re-render the settings page so inputs match exactly what's saved
+        },
+
+        renderInventoryManagement() {
+            const main = document.getElementById('main-content');
+            const isAdmin = state.currentUser.role === 'admin';
+
+            let html = `
+            <section class="section">
+                <div class="container">
+                    <div class="header-action">
+                        <div>
+                            <h2>Gestión de Inventario</h2>
+                            <p>Control de stock y solicitudes de insumos.</p>
+                        </div>
+                        ${isAdmin ? '<button onclick="turnoApp.showProductModal()" class="btn-primary">Nuevo Producto</button>' : '<button onclick="turnoApp.showInventoryRequestModal()" class="btn-primary">Pedir Insumos</button>'}
+                    </div>
+            `;
+
+            if (isAdmin) {
+                // Admin View: Products Catalog + Requests
+                html += `
+                    <h3 style="margin-top:2rem; margin-bottom:1rem;">Catálogo y Stock Actual</h3>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Unidad</th>
+                                    <th>Disponible</th>
+                                    <th>Reservado</th>
+                                    <th>Total Físico</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.inventoryProducts.map(p => `
+                                <tr>
+                                    <td><strong>${p.name}</strong><br><small style="color:#666;">${p.description || ''}</small></td>
+                                    <td>${p.unit_type}</td>
+                                    <td>
+                                        <span class="status-badge ${p.stock.available_quantity <= 5 ? 'cancelled' : 'completed'}">
+                                            ${p.stock.available_quantity}
+                                        </span>
+                                    </td>
+                                    <td><span style="color:#f59e0b; font-weight:bold;">${p.stock.reserved_quantity}</span></td>
+                                    <td style="color:#64748b;">${p.stock.total_quantity}</td>
+                                    <td>
+                                        <button onclick="turnoApp.showAdjustStockModal('${p.id}')" class="btn-icon" title="Ajustar Stock" style="color:var(--primary);"><i data-lucide="calculator"></i></button>
+                                        <button onclick="turnoApp.showProductModal('${p.id}')" class="btn-icon" title="Editar"><i data-lucide="edit"></i></button>
+                                    </td>
+                                </tr>
+                                `).join('')}
+                                ${state.inventoryProducts.length === 0 ? '<tr><td colspan="6" class="text-center">No hay productos registrados.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3 style="margin-top:3rem; margin-bottom:1rem;">Gestión de Pedidos</h3>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID Pedido</th>
+                                    <th>Fecha</th>
+                                    <th>Profesional</th>
+                                    <th>Detalles (Insumos)</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.inventoryRequests.map(r => `
+                                <tr>
+                                    <td><small style="color:#94a3b8;">${r.id.split('-')[0]}</small></td>
+                                    <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                                    <td><strong>${r.profiles?.name || 'N/A'}</strong></td>
+                                    <td>
+                                        <ul style="margin:0; padding-left:1.2rem; font-size:0.85rem;">
+                                            ${r.items?.map(i => `<li>${i.quantity}x ${i.product?.name} (${i.product?.unit_type})</li>`).join('') || 'Sin items'}
+                                        </ul>
+                                    </td>
+                                    <td><span class="status-badge status-${r.status.toLowerCase()}">${r.status}</span></td>
+                                    <td style="display:flex; gap:0.5rem; align-items:center;">
+                                        ${r.status === 'PENDING' ? `
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'APPROVED')" class="btn-secondary" style="color:#10b981; border-color:#10b981; padding: 4px 8px;">Aprobar</button>
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'REJECTED')" class="btn-secondary" style="color:#ef4444; border-color:#ef4444; padding: 4px 8px;">Rechazar</button>
+                                        ` : r.status === 'APPROVED' ? `
+                                        <button onclick="turnoApp.updateRequestStatus('${r.id}', 'DELIVERED')" class="btn-primary" style="padding: 4px 8px;">Entregar Físicamente</button>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                                `).join('')}
+                                ${state.inventoryRequests.length === 0 ? '<tr><td colspan="6" class="text-center">No hay pedidos recientes.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                // Professional View: My Requests
+                const myRequests = state.inventoryRequests.filter(r => r.professional_id === state.currentUser.id);
+                html += `
+                    <h3 style="margin-top:2rem; margin-bottom:1rem;">Mis Solicitudes</h3>
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID Pedido</th>
+                                    <th>Fecha</th>
+                                    <th>Mis Insumos Requeridos</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${myRequests.map(r => `
+                                <tr>
+                                    <td><small style="color:#94a3b8;">${r.id.split('-')[0]}</small></td>
+                                    <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        <ul style="margin:0; padding-left:1.2rem; font-size:0.85rem;">
+                                            ${r.items?.map(i => `<li>${i.quantity}x ${i.product?.name} (${i.product?.unit_type})</li>`).join('') || 'Sin items'}
+                                        </ul>
+                                    </td>
+                                    <td><span class="status-badge status-${r.status.toLowerCase()}">${r.status}</span></td>
+                                </tr>
+                                `).join('')}
+                                ${myRequests.length === 0 ? '<tr><td colspan="4" class="text-center">No has emitido pedidos aún.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            html += `
+                </div>
+            </section>
+            `;
+            main.innerHTML = html;
+            this.updateIcons();
+        },
+
+        // --- INVENTORY LOGIC (V2 RPC BACKED) ---
+        showProductModal(productId = null) {
+            const product = productId ? state.inventoryProducts.find(p => p.id === productId) : null;
+            const content = `
+                <div class="modal-header">
+                    <h3>${product ? 'Editar Producto' : 'Nuevo Producto / Base'}</h3>
+                    <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
+                </div>
+                <div class="modal-tab-content">
+                    <form onsubmit="turnoApp.saveProduct(event, ${product ? `'${product.id}'` : null})">
+                        <div class="form-group">
+                            <label class="form-label">Nombre Comercial</label>
+                            <input type="text" name="name" class="form-input" required value="${product ? product.name : ''}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Descripción</label>
+                            <input type="text" name="description" class="form-input" value="${product ? (product.description || '') : ''}">
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Tipo de Unidad</label>
+                                <select name="unit_type" class="form-select" required>
+                                    <option value="unit" ${product && product.unit_type === 'unit' ? 'selected' : ''}>Unidad(es)</option>
+                                    <option value="vial" ${product && product.unit_type === 'vial' ? 'selected' : ''}>Ampolla / Vial</option>
+                                    <option value="ml" ${product && product.unit_type === 'ml' ? 'selected' : ''}>Mililitros (ml)</option>
+                                    <option value="box" ${product && product.unit_type === 'box' ? 'selected' : ''}>Caja(s)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top:2rem; display:flex; justify-content:flex-end;">
+                            <button type="submit" class="btn-primary">Guardar Catálogo</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        async saveProduct(event, productId) {
+            event.preventDefault();
+            const form = event.target;
+            const payload = {
+                name: form.name.value,
+                description: form.description.value,
+                unit_type: form.unit_type.value
+            };
+
+            this.showNotification('Procesando...');
+            
+            if (productId) {
+                await supabase.from('products').update(payload).eq('id', productId);
+            } else {
+                await supabase.from('products').insert([payload]);
+            }
+            
+            this.closeModal();
+            await this.fetchInventoryProducts();
+            this.renderInventoryManagement();
+            this.showNotification('Catálogo actualizado.');
+        },
+
+        showAdjustStockModal(productId) {
+            const product = state.inventoryProducts.find(p => p.id === productId);
+            const content = `
+                <div class="modal-header">
+                    <h3>Operación Manual de Stock</h3>
+                    <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
+                </div>
+                <div style="padding:1rem;">
+                    <p style="margin-bottom:1rem; border-left: 3px solid #3b82f6; padding-left:0.8rem; background:#eff6ff; padding: 0.8rem; border-radius:4px;">
+                        Estás ajustando directamente el stock de <strong>${product.name}</strong>. Esta operación generará un log transaccional inmutable.
+                    </p>
+                    <form onsubmit="turnoApp.saveStockAdjustment(event, '${productId}')">
+                        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Unidades (Ej: 10, -3)</label>
+                                <input type="number" name="adj_quantity" class="form-input" required placeholder="Ej: 5 o -2">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Causa (Audit Log)</label>
+                                <input type="text" name="reason" class="form-input" required placeholder="Ej: Vencimiento, Proveedor, Merma...">
+                            </div>
+                        </div>
+                        <div style="margin-top:1.5rem; text-align:right;">
+                            <button type="submit" class="btn-primary" style="background:#0f172a; border-color:#0f172a;">Ejecutar Bloqueo y Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        async saveStockAdjustment(event, productId) {
+            event.preventDefault();
+            const qty = parseInt(event.target.adj_quantity.value);
+            const reason = event.target.reason.value;
+            
+            if (qty === 0) return this.closeModal();
+
+            this.showNotification('Iniciando transacción segura...');
+            
+            // 1. Invocar RPC para asegurar ACID y concurrencia for update
+            const { error: rpcError } = await supabase.rpc('rpc_inventory_adjust_stock', {
+                p_product_id: productId,
+                p_quantity: qty,
+                p_reason: reason,
+                p_user_id: state.currentUser.id
+            });
+
+            if (!rpcError) {
+                await this.fetchInventoryProducts();
+                this.renderInventoryManagement();
+                this.closeModal();
+                this.showNotification('Transacción exitosa. Stock comprometido.');
+            } else {
+                console.error(rpcError);
+                alert('La transacción fue abortada: Ocurrió un conflicto de bloqueo negativo o el stock no daría abasto.');
+            }
+        },
+
+        showInventoryRequestModal() {
+            const content = `
+                <div class="modal-header">
+                    <h3>Levantar Pedido Interno</h3>
+                    <button onclick="turnoApp.closeModal()" class="btn-icon">✖</button>
+                </div>
+                <div class="modal-tab-content">
+                    <form onsubmit="turnoApp.saveInventoryRequest(event)">
+                        <div class="form-group">
+                            <label class="form-label">Insumo Requerido (De momento sólo 1 item por pedido para simplificar UI)</label>
+                            <select name="product_id" class="form-select" required>
+                                ${state.inventoryProducts.map(p => `<option value="${p.id}">${p.name} (Stock Display: ${p.stock.available_quantity} ${p.unit_type})</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Cantidad a Solicitar</label>
+                            <input type="number" name="quantity" class="form-input" required value="1" min="1">
+                        </div>
+                        
+                        <div style="margin-top:2rem; text-align:right;">
+                            <button type="submit" class="btn-primary">Generar Orden</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        async saveInventoryRequest(event) {
+            event.preventDefault();
+            const product_id = event.target.product_id.value;
+            const qty = parseInt(event.target.quantity.value);
+
+            this.showNotification('Procesando Orden...');
+            
+            // Inserción dual: orders headers y orders items
+            const { data: order, error: orderErr } = await supabase.from('inventory_orders')
+                .insert([{ professional_id: state.currentUser.id, status: 'PENDING' }])
+                .select().single();
+
+            if (!orderErr && order) {
+                const { error: itemErr } = await supabase.from('inventory_order_items')
+                    .insert([{ order_id: order.id, product_id: product_id, quantity: qty }]);
+                
+                if (!itemErr) {
+                    await this.fetchInventoryRequests();
+                    this.renderInventoryManagement();
+                    this.closeModal();
+                    this.showNotification('Orden generada correctamente.');
+                    return;
+                }
+            }
+            alert('Fallo registrando en base.');
+        },
+
+        async updateRequestStatus(reqId, newStatus) {
+            const req = state.inventoryRequests.find(r => r.id === reqId);
+            if (!req) return;
+
+            this.showNotification('Ejecutando lógica de estado transaccional...');
+
+            if (newStatus === 'APPROVED') {
+                // Mueve available -> reserved (RPC locking)
+                const { error } = await supabase.rpc('rpc_inventory_approve_order', {
+                    p_order_id: reqId,
+                    p_user_id: state.currentUser.id
+                });
+                if (error) { console.error(error); return alert('Error procesando reservas. Probablemente stock insuficiente durante el bloqueo pesimista.'); }
+            
+            } else if (newStatus === 'DELIVERED') {
+                // Saca de reserved y efectúa el OUT (RPC locking)
+                const { error } = await supabase.rpc('rpc_inventory_deliver_order', {
+                    p_order_id: reqId,
+                    p_user_id: state.currentUser.id
+                });
+                if (error) { console.error(error); return alert('Error al registrar la entrega.'); }
+                
+            } else if (newStatus === 'REJECTED') {
+                // Rechazo simple (No implica blocks masIVOS)
+                await supabase.from('inventory_orders').update({ status: 'REJECTED' }).eq('id', reqId);
+            }
+
+            await this.fetchInventoryProducts();
+            await this.fetchInventoryRequests();
+            this.renderInventoryManagement();
+            this.showNotification('Orden procesada sistémicamente bajo patrón ACID.');
         },
 
         cancelBooking(id) {
