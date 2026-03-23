@@ -28,7 +28,7 @@
         isLoading: false,
         settings: {
             clinicName: 'JuliEsteve Salud',
-            email: 'contacto@juliestevesalud.com',
+            email: 'hola@elevamed.ar',
             phone: '+54 11 1234-5678',
             address: 'Av. Corrientes 1234, CABA',
             currency: 'ARS',
@@ -500,19 +500,49 @@
 
         updateBranding() {
             document.title = `${state.settings.clinicName} | Portal de Reservas`;
-            
+
             const logoEl = document.querySelector('.logo');
             if (logoEl) logoEl.innerHTML = `${state.settings.clinicName}<span>.</span>`;
-            
+
             const footerText = document.querySelector('.footer p');
             if (footerText) footerText.innerHTML = `&copy; ${new Date().getFullYear()} ${state.settings.clinicName}. Todos los derechos reservados.<br><br>📍 ${state.settings.address} | ✉ ${state.settings.email} | 📞 ${state.settings.phone}`;
         },
 
-        showNotification(message) {
+        showNotification(message, position = 'bottom') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
+            
+            // Handle placement
+            if (position === 'top-right') {
+                toast.style.top = '2rem';
+                toast.style.right = '2rem';
+                toast.style.bottom = 'auto';
+                toast.style.left = 'auto';
+                toast.style.transform = 'none'; // Overrides the default centered transform
+            } else {
+                // Default bottom-center
+                toast.style.top = 'auto';
+                toast.style.right = 'auto';
+                toast.style.bottom = '2rem';
+                toast.style.left = '50%';
+                toast.style.transform = 'translateX(-50%) translateY(100px)'; // Standard appearance
+            }
+
             toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 3000);
+            
+            // Once show is added, if we are default, it handles it via CSS `.show { transform: translateX(-50%) translateY(0); }`.
+            // For top-right, `transform: none` stays as is, we just rely on opacity.
+            if (position === 'top-right') {
+                toast.style.opacity = '1';
+                toast.style.transition = 'opacity 0.3s ease';
+            }
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                if (position === 'top-right') {
+                    toast.style.opacity = '0';
+                }
+            }, 3000);
         },
 
         openModal(content) {
@@ -1044,9 +1074,9 @@
             const service = state.services.find(s => s.id == serviceId);
             const duration = service.duration;
             const times = [];
-            
+
             const prof = state.professionals.find(p => p.id == profId);
-            
+
             if (prof && this.isDateFullyBlocked(prof.availability?.blockouts, date)) {
                 slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional se encuentra de vacaciones o no atiende este día completo.</p>';
                 return;
@@ -1056,8 +1086,8 @@
             const schedule = prof?.availability?.schedule?.[dayName] || [];
 
             if (schedule.length === 0) {
-                 slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional no atiende los días ' + new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }) + 's.</p>';
-                 return;
+                slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional no atiende los días ' + new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }) + 's.</p>';
+                return;
             }
 
             let minMin = 24 * 60;
@@ -1085,7 +1115,7 @@
             // Generate slots bounding minMin to maxMin
             for (let currentTime = minMin; currentTime + duration <= maxMin; currentTime += duration) {
                 const slotEnd = currentTime + duration;
-                
+
                 // Check if slot falls ENTIRELY within ANY of the defined schedule ranges
                 const isWithinWorkingHours = schedule.some(range => {
                     const [sTime, eTime] = range.split('-');
@@ -1105,7 +1135,7 @@
                 // Booking overlap check
                 const isBooked = existingBookings.some(b => {
                     const bStart = this.timeToMinutes(b.time);
-                    const bService = state.services.find(s => s.name === b.serviceName); 
+                    const bService = state.services.find(s => s.name === b.serviceName);
                     const bDuration = bService ? bService.duration : 60;
                     const bEnd = bStart + bDuration;
                     return (currentTime < bEnd && slotEnd > bStart);
@@ -1283,7 +1313,7 @@
 
         getPatientProfessionalsDisplay(p) {
             if (!p.assignedProfessionalIds || p.assignedProfessionalIds.length === 0) {
-                 return '<span style="color:#94a3b8; font-style:italic;">Sin asignar</span>';
+                return '<span style="color:#94a3b8; font-style:italic;">Sin asignar</span>';
             }
             const names = p.assignedProfessionalIds.map(id => {
                 const prof = state.professionals.find(pr => pr.id === id);
@@ -1295,7 +1325,7 @@
         openAssignProfessionalModal(email) {
             const p = state.patients.find(pt => pt.email === email);
             if (!p) return;
-            
+
             const content = `
                 <div class="modal-header">
                     <h3>Asignar Profesionales a ${p.name}</h3>
@@ -1328,7 +1358,7 @@
 
             p.assignedProfessionalIds = checked;
             localStorage.setItem('lumina_patients', JSON.stringify(state.patients));
-            
+
             this.closeModal();
             this.showNotification('Asignación de profesionales actualizada');
             this.renderPatients();
@@ -1684,7 +1714,7 @@
                 const dayMap = { 'Mon': 'Lunes', 'Tue': 'Martes', 'Wed': 'Miércoles', 'Thu': 'Jueves', 'Fri': 'Viernes', 'Sat': 'Sábado', 'Sun': 'Domingo' };
                 const ranges = availability.schedule[day] || [];
                 const isActive = ranges.length > 0;
-                
+
                 let start1 = '', end1 = '', start2 = '', end2 = '';
                 if (ranges[0]) {
                     [start1, end1] = ranges[0].split('-');
@@ -1745,12 +1775,12 @@
                         </div>
                         <div id="blockouts-container" style="display:flex; flex-direction:column; gap:0.5rem;">
                             ${(Array.isArray(availability.blockouts) ? availability.blockouts : []).map((b, i) => {
-                                // Soporte para formato legacy de strings
-                                if (typeof b === 'string') {
-                                    b = { type: 'full_day', start: b };
-                                }
-                                return turnoApp.generateBlockoutRowHTML(b, i);
-                            }).join('')}
+                // Soporte para formato legacy de strings
+                if (typeof b === 'string') {
+                    b = { type: 'full_day', start: b };
+                }
+                return turnoApp.generateBlockoutRowHTML(b, i);
+            }).join('')}
                         </div>
                     </div>
 
@@ -1782,7 +1812,7 @@
         isTimeBlocked(blockouts, dateStr, slotStartMin, slotDuration) {
             if (!blockouts || !Array.isArray(blockouts)) return false;
             const slotEndMin = slotStartMin + slotDuration;
-            
+
             return blockouts.some(b => {
                 if (b.type === 'time_slot' && b.start === dateStr) {
                     const bStartMin = this.timeToMinutes(b.startTime);
@@ -1844,8 +1874,8 @@
 
         addBlockoutRow() {
             const container = document.getElementById('blockouts-container');
-            if(container) {
-                container.insertAdjacentHTML('beforeend', this.generateBlockoutRowHTML({type:'full_day', start:''}, Date.now() + Math.floor(Math.random() * 1000)));
+            if (container) {
+                container.insertAdjacentHTML('beforeend', this.generateBlockoutRowHTML({ type: 'full_day', start: '' }, Date.now() + Math.floor(Math.random() * 1000)));
             }
         },
 
@@ -1882,11 +1912,11 @@
                     const e1 = formData.get(`end1_${day}`);
                     const s2 = formData.get(`start2_${day}`);
                     const e2 = formData.get(`end2_${day}`);
-                    
+
                     const dayRanges = [];
                     if (s1 && e1) dayRanges.push(`${s1}-${e1}`);
                     if (s2 && e2) dayRanges.push(`${s2}-${e2}`);
-                    
+
                     if (dayRanges.length > 0) {
                         schedule[day] = dayRanges;
                     }
@@ -1900,7 +1930,7 @@
                 const idAttr = row.getAttribute('data-id');
                 const type = formData.get(`bo_type_${idAttr}`);
                 const b = { type };
-                
+
                 if (type === 'full_day') {
                     b.start = formData.get(`bo_date_${idAttr}`);
                     if (!b.start) return; // Skip empty
@@ -1983,7 +2013,7 @@
 
                 this.closeModal();
                 this.renderProfessionalsManagement();
-                
+
                 // Show crucial alert with the credentials!
                 alert(`¡Profesional Creado Exitosamente!\n\nPor favor envía estos datos al profesional:\n\nEmail: ${userEmail}\nContraseña: ${userPassword}`);
             }
@@ -2286,7 +2316,7 @@
             this.closeModal();
             this.showNotification('Paciente creado y guardado en base de datos');
             this.renderPatients(); // Refresh list
-            
+
             // Show alert with credentials
             alert(`¡Paciente Creado Exitosamente!\n\nSe ha guardado en la base de datos central.\n\nEmail: ${email}\nContraseña temporal: ${userPassword}\n\nComunícale esta contraseña si desea ingresar a reservar turnos.`);
         },
@@ -2725,6 +2755,13 @@
             this.renderAdmin();
         },
 
+        getProfColor(profId) {
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#f43f5e', '#84cc16', '#6366f1'];
+            let hash = 0;
+            if (profId) hash = parseInt(profId);
+            return colors[hash % colors.length] || '#64748b';
+        },
+
         getAdminWeekHTML() {
             const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
             const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
@@ -2736,8 +2773,13 @@
             const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
             const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
-            let weekGrid = `<div class="week-view-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; overflow-x: auto;">`;
+            const startHour = 6;
+            const endHour = 23;
+            const pixelsPerMinute = 1; // 1 min = 1px
 
+            // Build Header
+            let headerHTML = '<div class="timetable-header-grid"><div class="timetable-time-axis-header"></div>';
+            const days = [];
             for (let i = 0; i < 7; i++) {
                 const dayDate = new Date(startOfWeek);
                 dayDate.setDate(startOfWeek.getDate() + i);
@@ -2745,38 +2787,121 @@
                 const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
                 const dayNum = dayDate.getDate();
                 const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                const isSelected = state.agendaView.selectedDay && new Date(state.agendaView.selectedDay).toISOString().split('T')[0] === dateStr;
+                
+                days.push({dateStr, dayDate, isToday});
+                headerHTML += `<div class="timetable-day-header ${isToday ? 'today' : ''}">
+                    <div style="text-transform: capitalize; font-size: 0.85rem;">${dayName}</div>
+                    <div style="font-size: 1.2rem;">${dayNum}</div>
+                </div>`;
+            }
+            headerHTML += '</div>';
 
-                // Filter by professional if selected
-                const dayBookings = state.bookings.filter(b =>
-                    b.date === dateStr &&
+            // Build Time Axis
+            let timeAxisHTML = '<div class="timetable-time-axis">';
+            for(let h = startHour; h <= endHour; h++) {
+                const label = `${h.toString().padStart(2, '0')}:00`;
+                timeAxisHTML += `<div class="time-label-slot"><span>${label}</span></div>`;
+            }
+            timeAxisHTML += '</div>';
+
+            // Build Columns
+            let columnsHTML = '';
+            for (let day of days) {
+                const dayBookings = state.bookings.filter(b => 
+                    b.date === day.dateStr && 
                     b.status !== 'Cancelado' &&
                     (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
                 );
 
-                weekGrid += `
-                        <div class="week-day-column ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" 
-                             style="min-width: 100px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem; background: ${isToday ? '#f0f9ff' : 'white'}; position: relative;">
-                             <button onclick="turnoApp.showAdminBookingModal('${dateStr}')" style="position: absolute; top: 4px; right: 4px; background: none; border: none; font-size: 1.1rem; line-height: 1; color: var(--primary); cursor: pointer; padding: 0; opacity: 0.6;" title="Nuevo Turno">+</button>
-                            <div onclick="turnoApp.changeWeekDay('${dateStr}')" style="cursor: pointer;">
-                                <div style="font-weight: 600; text-align: center; margin-bottom: 0.5rem; color: #64748b; text-transform: capitalize;">${dayName} ${dayNum}</div>
-                                <div class="day-bookings-list" style="display: flex; flex-direction: column; gap: 0.25rem;">
-                                    ${dayBookings.length > 0 ? dayBookings.map(b => `
-                                        <div style="background: ${this.getServiceColor(b.serviceId)}; color: white; padding: 4px 6px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${b.time} - ${b.clientName}">
-                                            ${b.time} ${b.clientName.split(' ')[0]}
-                                        </div>
-                                    `).join('') : '<div style="color: #cbd5e1; text-align: center; font-size: 1.5rem;">·</div>'}
-                                </div>
-                            </div>
-                        </div>`;
+                // Overlap resolver algorithm
+                dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+                const groups = [];
+                for(let b of dayBookings) {
+                    const parts = b.time.split(':');
+                    const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                    const endMin = startMin + (b.duration || 30);
+                    b.startMin = startMin;
+                    b.endMin = endMin;
+                    
+                    let placed = false;
+                    for(let g of groups) {
+                        if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                            g.push(b);
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if(!placed) {
+                        groups.push([b]);
+                    }
+                }
+                
+                for(let g of groups) {
+                    const count = g.length;
+                    g.forEach((b, index) => {
+                        b.widthPct = 95 / count;
+                        b.leftPct = (100 / count) * index;
+                    });
+                }
+
+                // Render Background Slots
+                let slotsHTML = '';
+                for(let h = startHour; h <= endHour; h++) {
+                    const t1 = `${h.toString().padStart(2, '0')}:00`;
+                    const t2 = `${h.toString().padStart(2, '0')}:30`;
+                    slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t1}')"></div>`;
+                    slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t2}')"></div>`;
+                }
+
+                // Render Bookings Objects
+                let bookingsHTML = '';
+                for(let b of dayBookings) {
+                    const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
+                    const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
+                    
+                    if (startOffset < 0) continue;
+
+                    bookingsHTML += `
+                    <div class="booking-block" 
+                         onclick="event.stopPropagation(); turnoApp.editBooking(${b.id})"
+                         style="top: ${startOffset}px; height: ${bHeight}px; left: ${b.leftPct}%; width: ${b.widthPct}%; background: ${turnoApp.getProfColor(b.professionalId)};">
+                        <div class="booking-title">${b.time} ${b.clientName.split(' ')[0]}</div>
+                        <div class="booking-subtitle">${b.serviceName}</div>
+                    </div>`;
+                }
+
+                // Render Red Line if Today matches
+                let currentTimeHTML = '';
+                if(day.isToday) {
+                    const now = new Date();
+                    const nowMin = now.getHours()*60 + now.getMinutes();
+                    if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
+                        const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                        currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
+                    }
+                }
+
+                columnsHTML += `<div class="timetable-day-column ${day.isToday ? 'today' : ''}">
+                    ${slotsHTML}
+                    ${bookingsHTML}
+                    ${currentTimeHTML}
+                </div>`;
             }
-            weekGrid += `</div>`;
+
+            let weekGrid = `
+            <div class="timetable-container" id="week-timetable-scroll">
+                ${headerHTML}
+                <div class="timetable-body">
+                    ${timeAxisHTML}
+                    ${columnsHTML}
+                </div>
+            </div>`;
 
             return `
                     <div class="calendar-container">
-                        <div class="calendar-header">
+                        <div class="calendar-header" style="margin-bottom: 1rem;">
                              <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">←</button>
-                             <h3>Semana ${startStr} - ${endStr}</h3>
+                             <h3 style="margin: 0; display: flex; align-items: center;">Semana ${startStr} - ${endStr}</h3>
                              <button onclick="turnoApp.changeWeek(1)" class="btn-icon">→</button>
                         </div>
                         ${weekGrid}
@@ -2908,7 +3033,7 @@
                                     return h >= sH && h < eH;
                                 });
                             }
-                            
+
                             // Apply time-specific blockouts (slots are 60m blocks in this view)
                             if (isWorkingHour && this.isTimeBlocked(prof.availability.blockouts, dateStr, h * 60, 60)) {
                                 isWorkingHour = false;
@@ -3074,30 +3199,22 @@
                                 <i data-lucide="zap"></i> Accesos Rápidos
                             </h3>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                                <button onclick="turnoApp.navigate('booking')" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
-                                    <div style="background: #e0f2fe; padding: 10px; border-radius: 50%; color: var(--primary);">
-                                        <i data-lucide="plus-circle" size="24"></i>
-                                    </div>
-                                    <span style="font-weight: 500; color: #334155;">Nuevo Turno</span>
+                                <button onclick="turnoApp.navigate('booking')" class="btn-secondary" style="height: auto; padding: 2rem 1.5rem; flex-direction: column; gap: 1rem; text-align: center; border: none; background: #e0f2fe; color: var(--primary); transition: transform 0.2s, filter 0.2s;" onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'">
+                                    <i data-lucide="plus-circle" size="40"></i>
+                                    <span style="font-weight: 600; font-size: 1.15rem;">Nuevo Turno</span>
                                 </button>
-                                <button onclick="turnoApp.showCreatePatientModal()" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
-                                    <div style="background: #f1f5f9; padding: 10px; border-radius: 50%; color: #64748b;">
-                                        <i data-lucide="user-plus" size="24"></i>
-                                    </div>
-                                    <span style="font-weight: 500; color: #334155;">Nuevo Paciente</span>
+                                <button onclick="turnoApp.showCreatePatientModal()" class="btn-secondary" style="height: auto; padding: 2rem 1.5rem; flex-direction: column; gap: 1rem; text-align: center; border: none; background: #f1f5f9; color: #475569; transition: transform 0.2s, filter 0.2s;" onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'">
+                                    <i data-lucide="user-plus" size="40"></i>
+                                    <span style="font-weight: 600; font-size: 1.15rem;">Nuevo Paciente</span>
                                 </button>
                                 ${!isProf ? `
-                                <button onclick="turnoApp.navigate('reports')" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
-                                    <div style="background: #f0fdf4; padding: 10px; border-radius: 50%; color: #166534;">
-                                        <i data-lucide="bar-chart-3" size="24"></i>
-                                    </div>
-                                    <span style="font-weight: 500; color: #334155;">Ver Reportes</span>
+                                <button onclick="turnoApp.navigate('reports')" class="btn-secondary" style="height: auto; padding: 2rem 1.5rem; flex-direction: column; gap: 1rem; text-align: center; border: none; background: #f0fdf4; color: #166534; transition: transform 0.2s, filter 0.2s;" onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'">
+                                    <i data-lucide="bar-chart-3" size="40"></i>
+                                    <span style="font-weight: 600; font-size: 1.15rem;">Ver Reportes</span>
                                 </button>
-                                <button onclick="turnoApp.navigate('admin')" class="btn-secondary" style="height: auto; padding: 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; border: 1px solid #e2e8f0; background: white;">
-                                    <div style="background: #fff7ed; padding: 10px; border-radius: 50%; color: #c2410c;">
-                                        <i data-lucide="calendar" size="24"></i>
-                                    </div>
-                                    <span style="font-weight: 500; color: #334155;">Ir a Agenda</span>
+                                <button onclick="turnoApp.navigate('admin')" class="btn-secondary" style="height: auto; padding: 2rem 1.5rem; flex-direction: column; gap: 1rem; text-align: center; border: none; background: #fff7ed; color: #c2410c; transition: transform 0.2s, filter 0.2s;" onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='brightness(1)'">
+                                    <i data-lucide="calendar" size="40"></i>
+                                    <span style="font-weight: 600; font-size: 1.15rem;">Ir a Agenda</span>
                                 </button>
                                 ` : ''}
                             </div>
@@ -3204,6 +3321,21 @@
                 </div>
             </section>
         `;
+        
+            if (viewMode === 'week') {
+                requestAnimationFrame(() => {
+                    const scrollEl = document.getElementById('week-timetable-scroll');
+                    if (scrollEl) {
+                        const now = new Date();
+                        const currentMin = now.getHours() * 60 + now.getMinutes();
+                        let targetScroll = 120; // 08:00 default
+                        if (currentMin >= 360 && currentMin <= 1380) {
+                            targetScroll = currentMin - 360 - 30; // 30px padding above current time
+                        }
+                        scrollEl.scrollTop = Math.max(0, targetScroll);
+                    }
+                });
+            }
         },
 
         getAdminListHTML() {
@@ -3408,34 +3540,72 @@
             const bookings = state.bookings.filter(b => b.date === dateStr);
             if (bookings.length === 0) return;
 
+            // Format date: "Turnos del miércoles 25 de marzo de 2026"
+            const dateObj = new Date(dateStr + "T12:00:00");
+            const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
             const content = `
-            <h3>Turnos del ${dateStr}</h3>
-            <div style="margin-top: 1rem; max-height: 400px; overflow-y: auto;">
-                ${bookings.map(b => `
-                    <div onclick="turnoApp.editBooking(${b.id})" style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
-                        <div>
-                            <strong>${b.time}</strong> - ${b.clientName}<br>
-                            <span style="font-size: 0.9rem; color: #666;">${b.serviceName} con ${b.professionalName}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <h3 style="margin: 0; text-transform: capitalize;">Turnos del ${prettyDate}</h3>
+                <button onclick="turnoApp.showAdminBookingModal('${dateStr}')" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">+ Nuevo Turno</button>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                ${bookings.map(b => {
+                    const price = b.price || (state.services.find(s=>s.id===b.serviceId)?.price || 0);
+                    const safeEmail = b.clientEmail ? b.clientEmail.replace(/'/g, "\\'") : '';
+                    return `
+                    <div onclick="turnoApp.editBooking(${b.id})" style="padding: 1rem 0.5rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: stretch; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                        <div style="display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem;">
+                            <div>
+                                <strong>${b.time}</strong> - 
+                                <a href="#" onclick="event.stopPropagation(); turnoApp.closeModal(); turnoApp.navigate('patient-profile', '${safeEmail}'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 600;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${b.clientName}</a>
+                                <br>
+                                <span style="font-size: 0.9rem; color: #64748b;">${b.serviceName} con ${b.professionalName}</span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: #475569; display: flex; gap: 1rem; align-items: center;">
+                                <span style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="tag" style="width:14px; height:14px;"></i> $${price}</span>
+                                <span style="display:inline-flex; align-items:center; gap:4px;"><i data-lucide="credit-card" style="width:14px; height:14px;"></i> ${b.paymentMethod || 'A confirmar'}</span>
+                            </div>
                         </div>
-                        <div style="text-align: right;">
+                        <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;">
                              <span class="status-badge ${b.status.toLowerCase()}" style="font-size: 0.75rem;">${b.status}</span>
-                             <div style="font-size: 0.75rem; color: var(--primary); margin-top: 4px;">Editar</div>
+                             <div style="font-size: 0.8rem; color: var(--primary); font-weight: 500;">Editar</div>
                         </div>
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
-             <div style="margin-top: 1rem; text-align: right;">
+             <div style="margin-top: 1.5rem; text-align: right;">
                 <button onclick="turnoApp.closeModal()" class="btn-secondary">Cerrar</button>
             </div>
         `;
             this.openModal(content);
+            setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 10);
         },
 
         showAdminBookingModal(defaultDate = '', defaultTime = '', defaultProfId = '') {
             // Ensure data availability
             const patientsList = state.patients.map(p => `<option value="${p.email}">${p.name} (${p.email})</option>`).join('');
-            const servicesList = state.services.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
+            
+            // Build services list initially based on default professional
+            let filteredServices = state.services;
+            if (defaultProfId) {
+                const prof = state.professionals.find(p => p.id == defaultProfId);
+                if (prof && prof.serviceIds && prof.serviceIds.length > 0) {
+                    filteredServices = state.services.filter(s => prof.serviceIds.includes(s.id));
+                }
+            }
+            const servicesList = filteredServices.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
+            
             const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == defaultProfId ? 'selected' : ''}>${p.name}</option>`).join('');
+
+            // Time increments to 30 mins
+            let timeOptions = '<option value="">Seleccionar Hora...</option>';
+            for (let h = 8; h <= 20; h++) {
+                for (let m of ['00', '30']) {
+                    const t = `${h.toString().padStart(2, '0')}:${m}`;
+                    timeOptions += `<option value="${t}" ${defaultTime === t ? 'selected' : ''}>${t}</option>`;
+                }
+            }
 
             const content = `
                 <div class="modal-header">
@@ -3456,28 +3626,50 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div class="form-group">
                             <label class="form-label">Fecha</label>
-                            <input type="date" name="date" class="form-input" required value="${defaultDate || new Date().toISOString().split('T')[0]}">
+                            <input type="date" name="date" class="form-input" required value="${defaultDate || new Date().toISOString().split('T')[0]}" onchange="turnoApp.checkBookingConflict()">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Hora</label>
-                            <input type="time" name="time" class="form-input" required value="${defaultTime}">
+                            <select name="time" class="form-select" required onchange="turnoApp.checkBookingConflict()">
+                                ${timeOptions}
+                            </select>
                         </div>
+                    </div>
+                    
+                    <div id="booking-conflict-warning" style="display: none; color: #b45309; background: #fef3c7; padding: 0.75rem; border-radius: 6px; font-size: 0.9rem; margin-bottom: 1rem; border: 1px solid #fde68a;">
+                        ⚠️ Este profesional ya tiene un turno a esta hora.
+                    </div>
+
+                    <div class="form-group">
+                         <label class="form-label">Profesional</label>
+                         <select name="professionalId" class="form-select" required onchange="turnoApp.onProfChangeInBookingModal(this.value); turnoApp.checkBookingConflict()">
+                            <option value="">Seleccionar Profesional...</option>
+                            ${professionalsList}
+                        </select>
                     </div>
 
                     <div class="form-group">
                          <label class="form-label">Servicio</label>
-                         <select name="serviceId" class="form-select" required>
+                         <select name="serviceId" class="form-select" required onchange="turnoApp.onServiceChangeInBookingModal(this.value)">
                             <option value="">Seleccionar Servicio...</option>
                             ${servicesList}
                         </select>
                     </div>
 
-                    <div class="form-group">
-                         <label class="form-label">Profesional</label>
-                         <select name="professionalId" class="form-select" required>
-                            <option value="">Seleccionar Profesional...</option>
-                            ${professionalsList}
-                        </select>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Método de pago</label>
+                            <select name="paymentMethod" class="form-select" required>
+                                <option value="A confirmar" selected>A confirmar</option>
+                                <option value="Efectivo">Efectivo</option>
+                                <option value="Tarjeta">Tarjeta</option>
+                                <option value="Transferencia">Transferencia</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Monto</label>
+                            <input type="number" name="price" id="booking-price" class="form-input" required placeholder="0">
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -3492,6 +3684,68 @@
                 </form>
             `;
             this.openModal(content);
+            
+            // Auto-trigger validations
+            setTimeout(() => {
+                 turnoApp.checkBookingConflict();
+                 const svcSelect = document.querySelector('select[name="serviceId"]');
+                 if(svcSelect && svcSelect.value) {
+                     turnoApp.onServiceChangeInBookingModal(svcSelect.value);
+                 }
+            }, 100);
+        },
+
+        onProfChangeInBookingModal(profId) {
+            const serviceSelect = document.querySelector('select[name="serviceId"]');
+            if(!serviceSelect) return;
+            
+            let filteredServices = state.services;
+            if (profId) {
+                const prof = state.professionals.find(p => p.id == profId);
+                if (prof && prof.serviceIds && prof.serviceIds.length > 0) {
+                    filteredServices = state.services.filter(s => prof.serviceIds.includes(s.id));
+                }
+            }
+            
+            serviceSelect.innerHTML = '<option value="">Seleccionar Servicio...</option>' + 
+                filteredServices.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
+                
+            serviceSelect.value = ''; // Reset selection
+            turnoApp.onServiceChangeInBookingModal(''); // Update price
+        },
+
+        onServiceChangeInBookingModal(serviceId) {
+            const priceInput = document.getElementById('booking-price');
+            if (!priceInput) return;
+            
+            if (!serviceId) {
+                priceInput.value = '';
+                return;
+            }
+            const service = state.services.find(s => s.id == serviceId);
+            if (service) {
+                priceInput.value = service.price || 0;
+            }
+        },
+
+        checkBookingConflict() {
+            const profIdSelect = document.querySelector('select[name="professionalId"]');
+            const dateInput = document.querySelector('input[name="date"]');
+            const timeSelect = document.querySelector('select[name="time"]');
+            const warningEl = document.getElementById('booking-conflict-warning');
+            
+            if(!profIdSelect || !dateInput || !timeSelect || !warningEl) return;
+            
+            const profId = profIdSelect.value;
+            const date = dateInput.value;
+            const time = timeSelect.value;
+            
+            if (profId && date && time) {
+                const conflict = state.bookings.find(b => b.professionalId == profId && b.date === date && b.time === time && b.status !== 'Cancelado');
+                warningEl.style.display = conflict ? 'block' : 'none';
+            } else {
+                warningEl.style.display = 'none';
+            }
         },
 
         async confirmAdminBooking(e) {
@@ -3503,6 +3757,8 @@
             const serviceId = parseInt(form.serviceId.value);
             const professionalId = parseInt(form.professionalId.value);
             const notes = form.notes.value;
+            const paymentMethod = form.paymentMethod ? form.paymentMethod.value : 'A confirmar';
+            const price = form.price ? parseFloat(form.price.value) : 0;
 
             // Basic Validation
             if (!clientEmail || !date || !time || !serviceId || !professionalId) {
@@ -3528,6 +3784,8 @@
                 clientEmail,
                 clientName: patient.name,
                 clientPhone: patient.phone,
+                paymentMethod,
+                price,
                 status: 'Confirmado',
                 notes
             };
@@ -3545,7 +3803,7 @@
 
             localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
 
-            this.showNotification('Turno agendado correctamente');
+            this.showNotification('Turno agendado correctamente', 'top-right');
             this.closeModal();
             this.renderAdmin(); // Refresh calendar
         },
@@ -3929,20 +4187,20 @@
         saveSettings(event) {
             event.preventDefault();
             const formData = new FormData(event.target);
-            
+
             state.settings.clinicName = formData.get('clinicName');
             state.settings.email = formData.get('email');
             state.settings.phone = formData.get('phone');
             state.settings.address = formData.get('address');
             state.settings.currency = formData.get('currency');
             state.settings.primaryColor = formData.get('primaryColor');
-            
+
             localStorage.setItem('lumina_clinic_settings', JSON.stringify(state.settings));
-            
+
             // Re-apply immediately safely
             document.documentElement.style.setProperty('--primary', state.settings.primaryColor);
             this.updateBranding();
-            
+
             this.showNotification('Configuración guardada exitosamente.');
             this.renderSidebar(); // refresh sidebar titles if affected by any variable
             this.renderSettings(); // re-render the settings page so inputs match exactly what's saved
@@ -4135,13 +4393,13 @@
             };
 
             this.showNotification('Procesando...');
-            
+
             if (productId) {
                 await supabase.from('products').update(payload).eq('id', productId);
             } else {
                 await supabase.from('products').insert([payload]);
             }
-            
+
             this.closeModal();
             await this.fetchInventoryProducts();
             this.renderInventoryManagement();
@@ -4183,11 +4441,11 @@
             event.preventDefault();
             const qty = parseInt(event.target.adj_quantity.value);
             const reason = event.target.reason.value;
-            
+
             if (qty === 0) return this.closeModal();
 
             this.showNotification('Iniciando transacción segura...');
-            
+
             // 1. Invocar RPC para asegurar ACID y concurrencia for update
             const { error: rpcError } = await supabase.rpc('rpc_inventory_adjust_stock', {
                 p_product_id: productId,
@@ -4241,7 +4499,7 @@
             const qty = parseInt(event.target.quantity.value);
 
             this.showNotification('Procesando Orden...');
-            
+
             // Inserción dual: orders headers y orders items
             const { data: order, error: orderErr } = await supabase.from('inventory_orders')
                 .insert([{ professional_id: state.currentUser.id, status: 'PENDING' }])
@@ -4250,7 +4508,7 @@
             if (!orderErr && order) {
                 const { error: itemErr } = await supabase.from('inventory_order_items')
                     .insert([{ order_id: order.id, product_id: product_id, quantity: qty }]);
-                
+
                 if (!itemErr) {
                     await this.fetchInventoryRequests();
                     this.renderInventoryManagement();
@@ -4275,7 +4533,7 @@
                     p_user_id: state.currentUser.id
                 });
                 if (error) { console.error(error); return alert('Error procesando reservas. Probablemente stock insuficiente durante el bloqueo pesimista.'); }
-            
+
             } else if (newStatus === 'DELIVERED') {
                 // Saca de reserved y efectúa el OUT (RPC locking)
                 const { error } = await supabase.rpc('rpc_inventory_deliver_order', {
@@ -4283,7 +4541,7 @@
                     p_user_id: state.currentUser.id
                 });
                 if (error) { console.error(error); return alert('Error al registrar la entrega.'); }
-                
+
             } else if (newStatus === 'REJECTED') {
                 // Rechazo simple (No implica blocks masIVOS)
                 await supabase.from('inventory_orders').update({ status: 'REJECTED' }).eq('id', reqId);
@@ -4319,65 +4577,108 @@
             const booking = state.bookings.find(b => b.id === id);
             if (!booking) return;
 
+            const isReadOnly = booking.status === 'Completado' || booking.status === 'Cancelado';
+
             const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == booking.professionalId ? 'selected' : ''}>${p.name}</option>`).join('');
             const servicesList = state.services.map(s => `<option value="${s.id}" ${s.id == booking.serviceId ? 'selected' : ''}>${s.name}</option>`).join('');
+
+            const statusOptions = ['Pendiente', 'Confirmado', 'Completado', 'Cancelado'].map(s => {
+                let disabled = false;
+                let label = s;
+                if (booking.status === 'Confirmado' && s === 'Pendiente') {
+                    disabled = true;
+                    label += ' (inválido)';
+                }
+                return `<option value="${s}" ${booking.status === s ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${label}</option>`;
+            }).join('');
 
             const content = `
             <div class="modal-header">
                 <h3>Editar Reserva</h3>
                 <p style="color: #666; font-size: 0.9rem;">${booking.clientName}</p>
             </div>
-            <form onsubmit="turnoApp.updateBooking(event, ${id})">
+            ${isReadOnly ? `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;">
+                    ⚠️ Este turno ya fue ${booking.status.toLowerCase()} y no puede modificarse.
+                </div>
+            ` : ''}
+            <form id="edit-booking-form" onsubmit="turnoApp.updateBooking(event, ${id})">
                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                     <div class="form-group">
                         <label class="form-label">Fecha</label>
-                        <input type="date" name="date" class="form-input" value="${booking.date}" required>
+                        <input type="date" name="date" class="form-input" value="${booking.date}" required ${isReadOnly ? 'disabled' : ''}>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Hora</label>
-                        <input type="time" name="time" class="form-input" value="${booking.time}" required>
+                        <input type="time" name="time" class="form-input" value="${booking.time}" required ${isReadOnly ? 'disabled' : ''}>
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Profesional</label>
-                    <select name="professionalId" class="form-select" required>
+                    <select name="professionalId" class="form-select" required ${isReadOnly ? 'disabled' : ''}>
                         ${professionalsList}
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Servicio</label>
-                    <select name="serviceId" class="form-select" required>
-                        ${servicesList}
-                    </select>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <select name="serviceId" class="form-select" required style="flex: 1;" ${isReadOnly ? 'disabled' : ''} onchange="turnoApp.onServiceChangeInEditModal(this.value)">
+                            ${servicesList}
+                        </select>
+                        <span id="edit-service-duration" style="font-size: 0.9rem; color: #64748b; font-weight: 500; white-space: nowrap;">Duración: ${booking.duration || (state.services.find(s=>s.id===booking.serviceId)?.duration || 0)} min</span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Método de pago</label>
+                        <select name="paymentMethod" class="form-select" required ${isReadOnly ? 'disabled' : ''}>
+                            <option value="A confirmar" ${booking.paymentMethod === 'A confirmar' ? 'selected' : ''}>A confirmar</option>
+                            <option value="Efectivo" ${booking.paymentMethod === 'Efectivo' ? 'selected' : ''}>Efectivo</option>
+                            <option value="Tarjeta" ${booking.paymentMethod === 'Tarjeta' ? 'selected' : ''}>Tarjeta</option>
+                            <option value="Transferencia" ${booking.paymentMethod === 'Transferencia' ? 'selected' : ''}>Transferencia</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Monto</label>
+                        <input type="number" name="price" id="edit-booking-price" class="form-input" required value="${booking.price !== undefined ? booking.price : (state.services.find(s=>s.id===booking.serviceId)?.price || 0)}" ${isReadOnly ? 'disabled' : ''}>
+                    </div>
                 </div>
 
                  <div class="form-group">
                     <label class="form-label">Estado</label>
-                    <select name="status" class="form-select">
-                        <option value="Confirmado" ${booking.status === 'Confirmado' ? 'selected' : ''}>Confirmado</option>
-                        <option value="Pendiente" ${booking.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
-                        <option value="Completado" ${booking.status === 'Completado' ? 'selected' : ''}>Completado</option>
-                         <option value="Cancelado" ${booking.status === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+                    <select name="status" class="form-select" ${isReadOnly ? 'disabled' : ''}>
+                        ${statusOptions}
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Notas</label>
-                    <textarea name="notes" class="form-input" rows="2">${booking.notes || ''}</textarea>
+                    <textarea name="notes" class="form-input" rows="2" ${isReadOnly ? 'disabled' : ''}>${booking.notes || ''}</textarea>
                 </div>
 
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem; justify-content: space-between;">
-                    <button type="button" onclick="turnoApp.closeModal(); turnoApp.cancelBooking(${id})" style="color: #ef4444; background: none; border: none; font-weight: 500; cursor: pointer;">Cancelar Turno</button>
+                    ${!isReadOnly ? `<button type="button" onclick="turnoApp.closeModal(); turnoApp.cancelBooking(${id})" style="color: #ef4444; background: none; border: none; font-weight: 500; cursor: pointer;">Cancelar Turno</button>` : `<div></div>`}
                     <div style="display: flex; gap: 0.5rem;">
                         <button type="button" onclick="turnoApp.closeModal()" class="btn-secondary">Cerrar</button>
-                        <button type="submit" class="btn-primary">Guardar Cambios</button>
+                        ${!isReadOnly ? `<button type="submit" class="btn-primary">Guardar Cambios</button>` : ''}
                     </div>
                 </div>
             </form>
             `;
             this.openModal(content);
+        },
+
+        onServiceChangeInEditModal(serviceId) {
+            const service = state.services.find(s => s.id == serviceId);
+            if (service) {
+                const durEl = document.getElementById('edit-service-duration');
+                const priceEl = document.getElementById('edit-booking-price');
+                if (durEl) durEl.innerText = `Duración: ${service.duration || 0} min`;
+                if (priceEl) priceEl.value = service.price || 0;
+            }
         },
 
         updateBooking(e, id) {
@@ -4390,6 +4691,8 @@
                 booking.time = formData.get('time');
                 booking.status = formData.get('status');
                 booking.notes = formData.get('notes');
+                booking.paymentMethod = formData.get('paymentMethod');
+                booking.price = parseFloat(formData.get('price')) || 0;
 
                 // Update relations if changed (simplified)
                 const newProfId = parseInt(formData.get('professionalId'));
@@ -4404,129 +4707,14 @@
                     booking.serviceId = newServiceId;
                     const srv = state.services.find(s => s.id === newServiceId);
                     booking.serviceName = srv ? srv.name : 'Unknown';
+                    booking.duration = srv ? srv.duration : 30;
                 }
 
                 localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
 
-                this.closeModal();
-                this.showNotification('Reserva actualizada correctamente');
-                this.renderAdmin();
-            }
-        },
-
-        getAdminWeekHTML() {
-            const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
-            const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
-            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
-            const startOfWeek = new Date(currentDate.setDate(diff));
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-            const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-            const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-
-            let weekGrid = `<div class="week-view-container" style="display: flex; gap: 10px; overflow-x: auto;">`;
-
-            for (let i = 0; i < 7; i++) {
-                const dayDate = new Date(startOfWeek);
-                dayDate.setDate(startOfWeek.getDate() + i);
-                const dateStr = dayDate.toISOString().split('T')[0];
-                const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
-                const dayNum = dayDate.getDate();
-                const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                const isSelected = state.agendaView.selectedDay && new Date(state.agendaView.selectedDay).toISOString().split('T')[0] === dateStr;
-
-                const dayBookings = state.bookings.filter(b => b.date === dateStr && b.status !== 'Cancelado');
-
-                weekGrid += `
-                <div class="week-day-column ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" 
-                     onclick="turnoApp.showDayDetails('${dateStr}')" 
-                     style="flex: 1; min-width: 120px; border: 1px solid #eee; border-radius: 8px; padding: 10px; background: ${isToday ? '#f0f9ff' : 'white'}; cursor: pointer;">
-                    <div style="font-weight: bold; text-align: center; margin-bottom: 5px; color: #555;">${dayName} ${dayNum}</div>
-                    <div class="day-bookings-list" style="font-size: 0.8rem;">
-                        ${dayBookings.length > 0 ? dayBookings.map(b => `
-                            <div style="background: ${this.getServiceColor(b.serviceId)}; color: white; padding: 2px 4px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                ${b.time} ${b.clientName.split(' ')[0]}
-                            </div>
-                        `).join('') : '<div style="color: #ccc; text-align: center;">-</div>'}
-                    </div>
-                </div>`;
-            }
-            weekGrid += `</div>`;
-
-            return `
-            <div class="calendar-container">
-                <div class="calendar-header">
-                     <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">â† </button>
-                     <h3>Semana ${startStr} - ${endStr}</h3>
-                     <button onclick="turnoApp.changeWeek(1)" class="btn-icon">â†’ </button>
-                </div>
-                ${weekGrid}
-            </div>`;
-        },
-
-        changeWeek(direction) {
-            const current = new Date(state.agendaView.selectedDay || new Date());
-            current.setDate(current.getDate() + (direction * 7));
-            state.agendaView.selectedDay = current;
-            state.agendaView.calendarMonth = current.getMonth();
-            state.agendaView.calendarYear = current.getFullYear();
-            this.renderAdmin();
-        },
-
-        getAdminDayHTML() {
-            const dateStr = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-            const dateObj = new Date(dateStr + 'T12:00:00'); // Safe date parsing
-            const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-            const dayBookings = state.bookings
-                .filter(b => b.date === dateStr && b.status !== 'Cancelado')
-                .sort((a, b) => a.time.localeCompare(b.time));
-
-            // Grid 8am - 8pm
-            const hours = [];
-            for (let h = 8; h <= 20; h++) {
-                hours.push(`${h.toString().padStart(2, '0')}:00`);
-            }
-
-            let dayGrid = `<div class="day-view-container" style="display: flex; flex-direction: column; gap: 5px;">`;
-
-            // Simple list for now, timeline view is complex
-            if (dayBookings.length === 0) {
-                dayGrid += `<div style="padding: 2rem; text-align: center; color: #666;">No hay turnos para este dÃ­a.</div>`;
-            } else {
-                dayGrid += dayBookings.map(b => `
-                    <div style="display: flex; gap: 1rem; padding: 10px; border: 1px solid #eee; border-radius: 8px; align-items: center; background: white;">
-                        <div style="font-weight: bold; width: 60px; color: var(--primary);">${b.time}</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600;">${b.serviceName} (${b.duration} min)</div>
-                            <div style="font-size: 0.9rem; color: #555;">${b.clientName}</div>
-                            <div style="font-size: 0.8rem; color: #888;">${b.professionalName}</div>
-                        </div>
-                        <div>
-                             <span class="status-badge ${b.status === 'Confirmado' ? 'confirmado' : 'pendiente'}">${b.status}</span>
-                        </div>
-                        <div>
-                             <button onclick="turnoApp.editBooking(${b.id})" class="btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">Editar</button>
-                        </div>
-                    </div>
-                 `).join('');
-            }
-            dayGrid += `</div>`;
-
-            return `
-            <div class="calendar-container">
-                <div class="calendar-header">
-                     <button onclick="turnoApp.changeDay(-1)" class="btn-icon">â† </button>
-                     <h3>${prettyDate}</h3>
-                     <button onclick="turnoApp.changeDay(1)" class="btn-icon">â†’ </button>
-                </div>
-                ${dayGrid}
-            </div>`;
-        },
-
-        changeDay(direction) {
-            const current = new Date(state.agendaView.selectedDay || new Date());
+                this.showNotification('Reserva actualizada correctamente', 'top-right');
+                
+      ctedDay || new Date());
             current.setDate(current.getDate() + direction);
             state.agendaView.selectedDay = current;
             state.agendaView.calendarMonth = current.getMonth();
