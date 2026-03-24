@@ -27,7 +27,7 @@
         visibleServicesCount: 4,
         isLoading: false,
         settings: {
-            clinicName: 'JuliEsteve Salud',
+            clinicName: 'ElevaMed',
             email: 'hola@elevamed.ar',
             phone: '+54 11 1234-5678',
             address: 'Av. Corrientes 1234, CABA',
@@ -384,7 +384,7 @@
             const sidebarHTML = `
                 <aside id="sidebar" class="${isCollapsed ? 'collapsed' : ''}">
                     <div class="sidebar-header">
-                        <div class="logo-text">JuliEsteve<span style="color:var(--secondary)">.</span></div>
+                        <div class="logo-text">ElevaMed<span style="color:var(--secondary)">.</span></div>
                         <button class="collapse-btn" onclick="turnoApp.toggleSidebar()">
                             <i data-lucide="${isCollapsed ? 'chevrons-right' : 'chevrons-left'}"></i>
                         </button>
@@ -1237,7 +1237,7 @@
                     <p style="color: #666;">Hemos enviado un correo a <strong>${booking.clientEmail}</strong></p>
                 </div>
                 <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e2e8f0; text-align: left; font-family: monospace; font-size: 0.9rem; color: #475569; position: relative;">
-                    <p style="margin-bottom: 0.5rem;"><strong>Asunto:</strong> Confirmación de Turno - JuliEsteve</p>
+                    <p style="margin-bottom: 0.5rem;"><strong>Asunto:</strong> Confirmación de Turno - ElevaMed</p>
                     <p>Hola ${booking.clientName}, tu turno para <strong>${booking.serviceName}</strong> con ${booking.professionalName} el ${booking.date} a las ${booking.time} está confirmado.</p>
                 </div>
             </div>
@@ -1251,7 +1251,7 @@
                     <p style="color: #666;">Envía los detalles por WhatsApp</p>
                 </div>
                 <div style="background: #e5ffeb; padding: 1rem; border-radius: 8px; text-align: left; margin-bottom: 1rem; color: #1f2937;">
-                    <p>Hola *${booking.clientName}*! 👋<br>Te confirmamos tu turno en *JuliEsteve*:<br>✨ Tratamiento: ${booking.serviceName}<br>📅 Fecha: ${booking.date}<br>⏰ Hora: ${booking.time}<br>📍 Te esperamos!</p>
+                    <p>Hola *${booking.clientName}*! 👋<br>Te confirmamos tu turno en *ElevaMed*:<br>✨ Tratamiento: ${booking.serviceName}<br>📅 Fecha: ${booking.date}<br>⏰ Hora: ${booking.time}<br>📍 Te esperamos!</p>
                 </div>
                 <a href="https://wa.me/?text=Hola ${encodeURIComponent(booking.clientName)}! Te confirmamos tu turno: ${booking.serviceName} el ${booking.date} a las ${booking.time}." target="_blank" class="btn-primary" style="background: #25D366; border-color: #25D366; width: 100%; display: block; text-align: center; text-decoration: none;">Abrir WhatsApp</a>
             </div>
@@ -1264,7 +1264,7 @@
                      <h2>Enviar SMS</h2>
                 </div>
                 <div style="background: #f3f4f6; padding: 1rem; border-radius: 8px; text-align: left; margin-bottom: 1rem; font-family: monospace;">
-                    <p>JuliEsteve: Turno confirmado para ${booking.serviceName} el ${booking.date} ${booking.time}.</p>
+                    <p>ElevaMed: Turno confirmado para ${booking.serviceName} el ${booking.date} ${booking.time}.</p>
                 </div>
                 <button onclick="turnoApp.showNotification('SMS enviado (simulado)')" class="btn-primary" style="width: 100%; background: #4b5563; border-color: #4b5563;">Simular Envío SMS</button>
             </div>
@@ -2759,8 +2759,8 @@
                 const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
                 const dayNum = dayDate.getDate();
                 const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                
-                days.push({dateStr, dayDate, isToday});
+
+                days.push({ dateStr, dayDate, isToday });
                 headerHTML += `<div class="timetable-day-header ${isToday ? 'today' : ''}">
                     <div style="text-transform: capitalize; font-size: 0.85rem;">${dayName}</div>
                     <div style="font-size: 1.2rem;">${dayNum}</div>
@@ -2770,7 +2770,7 @@
 
             // Build Time Axis
             let timeAxisHTML = '<div class="timetable-time-axis">';
-            for(let h = startHour; h <= endHour; h++) {
+            for (let h = startHour; h <= endHour; h++) {
                 const label = `${h.toString().padStart(2, '0')}:00`;
                 timeAxisHTML += `<div class="time-label-slot"><span>${label}</span></div>`;
             }
@@ -2779,36 +2779,36 @@
             // Build Columns
             let columnsHTML = '';
             for (let day of days) {
-                const dayBookings = state.bookings.filter(b => 
-                    b.date === day.dateStr && 
+                const dayBookings = state.bookings.filter(b =>
+                    b.date === day.dateStr &&
                     b.status !== 'Cancelado' &&
                     (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
                 );
 
                 // Overlap resolver algorithm
-                dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+                dayBookings.sort((a, b) => a.time.localeCompare(b.time));
                 const groups = [];
-                for(let b of dayBookings) {
+                for (let b of dayBookings) {
                     const parts = b.time.split(':');
-                    const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                    const startMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
                     const endMin = startMin + (b.duration || 30);
                     b.startMin = startMin;
                     b.endMin = endMin;
-                    
+
                     let placed = false;
-                    for(let g of groups) {
-                        if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                    for (let g of groups) {
+                        if (g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
                             g.push(b);
                             placed = true;
                             break;
                         }
                     }
-                    if(!placed) {
+                    if (!placed) {
                         groups.push([b]);
                     }
                 }
-                
-                for(let g of groups) {
+
+                for (let g of groups) {
                     const count = g.length;
                     g.forEach((b, index) => {
                         b.widthPct = 95 / count;
@@ -2818,7 +2818,7 @@
 
                 // Render Background Slots
                 let slotsHTML = '';
-                for(let h = startHour; h <= endHour; h++) {
+                for (let h = startHour; h <= endHour; h++) {
                     const t1 = `${h.toString().padStart(2, '0')}:00`;
                     const t2 = `${h.toString().padStart(2, '0')}:30`;
                     slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t1}')"></div>`;
@@ -2827,10 +2827,10 @@
 
                 // Render Bookings Objects
                 let bookingsHTML = '';
-                for(let b of dayBookings) {
+                for (let b of dayBookings) {
                     const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
                     const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
-                    
+
                     if (startOffset < 0) continue;
 
                     bookingsHTML += `
@@ -2844,11 +2844,11 @@
 
                 // Render Red Line if Today matches
                 let currentTimeHTML = '';
-                if(day.isToday) {
+                if (day.isToday) {
                     const now = new Date();
-                    const nowMin = now.getHours()*60 + now.getMinutes();
-                    if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
-                        const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                    const nowMin = now.getHours() * 60 + now.getMinutes();
+                    if (nowMin >= startHour * 60 && nowMin <= (endHour + 1) * 60) {
+                        const topOffset = (nowMin - (startHour * 60)) * pixelsPerMinute;
                         currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
                     }
                 }
@@ -3293,7 +3293,7 @@
                 </div>
             </section>
         `;
-        
+
             if (viewMode === 'week') {
                 requestAnimationFrame(() => {
                     const scrollEl = document.getElementById('week-timetable-scroll');
@@ -3523,9 +3523,9 @@
             </div>
             <div style="max-height: 400px; overflow-y: auto;">
                 ${bookings.map(b => {
-                    const price = b.price || (state.services.find(s=>s.id===b.serviceId)?.price || 0);
-                    const safeEmail = b.clientEmail ? b.clientEmail.replace(/'/g, "\\'") : '';
-                    return `
+                const price = b.price || (state.services.find(s => s.id === b.serviceId)?.price || 0);
+                const safeEmail = b.clientEmail ? b.clientEmail.replace(/'/g, "\\'") : '';
+                return `
                     <div onclick="turnoApp.editBooking(${b.id})" style="padding: 1rem 0.5rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: stretch; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                         <div style="display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem;">
                             <div>
@@ -3557,7 +3557,7 @@
         showAdminBookingModal(defaultDate = '', defaultTime = '', defaultProfId = '') {
             // Ensure data availability
             const patientsList = state.patients.map(p => `<option value="${p.email}">${p.name} (${p.email})</option>`).join('');
-            
+
             // Build services list initially based on default professional
             let filteredServices = state.services;
             if (defaultProfId) {
@@ -3567,7 +3567,7 @@
                 }
             }
             const servicesList = filteredServices.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
-            
+
             const professionalsList = state.professionals.map(p => `<option value="${p.id}" ${p.id == defaultProfId ? 'selected' : ''}>${p.name}</option>`).join('');
 
             // Time increments to 30 mins
@@ -3656,21 +3656,21 @@
                 </form>
             `;
             this.openModal(content);
-            
+
             // Auto-trigger validations
             setTimeout(() => {
-                 turnoApp.checkBookingConflict();
-                 const svcSelect = document.querySelector('select[name="serviceId"]');
-                 if(svcSelect && svcSelect.value) {
-                     turnoApp.onServiceChangeInBookingModal(svcSelect.value);
-                 }
+                turnoApp.checkBookingConflict();
+                const svcSelect = document.querySelector('select[name="serviceId"]');
+                if (svcSelect && svcSelect.value) {
+                    turnoApp.onServiceChangeInBookingModal(svcSelect.value);
+                }
             }, 100);
         },
 
         onProfChangeInBookingModal(profId) {
             const serviceSelect = document.querySelector('select[name="serviceId"]');
-            if(!serviceSelect) return;
-            
+            if (!serviceSelect) return;
+
             let filteredServices = state.services;
             if (profId) {
                 const prof = state.professionals.find(p => p.id == profId);
@@ -3678,10 +3678,10 @@
                     filteredServices = state.services.filter(s => prof.serviceIds.includes(s.id));
                 }
             }
-            
-            serviceSelect.innerHTML = '<option value="">Seleccionar Servicio...</option>' + 
+
+            serviceSelect.innerHTML = '<option value="">Seleccionar Servicio...</option>' +
                 filteredServices.map(s => `<option value="${s.id}">${s.name} (${s.duration} min) - ${turnoApp.formatServicePrice(s)}</option>`).join('');
-                
+
             serviceSelect.value = ''; // Reset selection
             turnoApp.onServiceChangeInBookingModal(''); // Update price
         },
@@ -3689,7 +3689,7 @@
         onServiceChangeInBookingModal(serviceId) {
             const priceInput = document.getElementById('booking-price');
             if (!priceInput) return;
-            
+
             if (!serviceId) {
                 priceInput.value = '';
                 return;
@@ -3705,13 +3705,13 @@
             const dateInput = document.querySelector('input[name="date"]');
             const timeSelect = document.querySelector('select[name="time"]');
             const warningEl = document.getElementById('booking-conflict-warning');
-            
-            if(!profIdSelect || !dateInput || !timeSelect || !warningEl) return;
-            
+
+            if (!profIdSelect || !dateInput || !timeSelect || !warningEl) return;
+
             const profId = profIdSelect.value;
             const date = dateInput.value;
             const time = timeSelect.value;
-            
+
             if (profId && date && time) {
                 const conflict = state.bookings.find(b => b.professionalId == profId && b.date === date && b.time === time && b.status !== 'Cancelado');
                 warningEl.style.display = conflict ? 'block' : 'none';
@@ -4599,7 +4599,7 @@
                         <select name="serviceId" class="form-select" required style="flex: 1;" ${isReadOnly ? 'disabled' : ''} onchange="turnoApp.onServiceChangeInEditModal(this.value)">
                             ${servicesList}
                         </select>
-                        <span id="edit-service-duration" style="font-size: 0.9rem; color: #64748b; font-weight: 500; white-space: nowrap;">Duración: ${booking.duration || (state.services.find(s=>s.id===booking.serviceId)?.duration || 0)} min</span>
+                        <span id="edit-service-duration" style="font-size: 0.9rem; color: #64748b; font-weight: 500; white-space: nowrap;">Duración: ${booking.duration || (state.services.find(s => s.id === booking.serviceId)?.duration || 0)} min</span>
                     </div>
                 </div>
 
@@ -4615,7 +4615,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">Monto</label>
-                        <input type="number" name="price" id="edit-booking-price" class="form-input" required value="${booking.price !== undefined ? booking.price : (state.services.find(s=>s.id===booking.serviceId)?.price || 0)}" ${isReadOnly ? 'disabled' : ''}>
+                        <input type="number" name="price" id="edit-booking-price" class="form-input" required value="${booking.price !== undefined ? booking.price : (state.services.find(s => s.id === booking.serviceId)?.price || 0)}" ${isReadOnly ? 'disabled' : ''}>
                     </div>
                 </div>
 
@@ -4685,13 +4685,13 @@
                 localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
 
                 this.showNotification('Reserva actualizada correctamente', 'top-right');
-                
+
                 if (booking.status === 'Completado' || booking.status === 'Cancelado') {
                     this.editBooking(id);
                 } else {
                     this.closeModal();
                 }
-                
+
                 this.renderAdmin();
             }
         },
@@ -4711,8 +4711,8 @@
 
         getAdminWeekHTML() {
             const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
-            const dayOfWeek = currentDate.getDay(); 
-            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
+            const dayOfWeek = currentDate.getDay();
+            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
             const startOfWeek = new Date(currentDate.setDate(diff));
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -4735,8 +4735,8 @@
                 const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
                 const dayNum = dayDate.getDate();
                 const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                
-                days.push({dateStr, dayDate, isToday});
+
+                days.push({ dateStr, dayDate, isToday });
                 headerHTML += `<div class="timetable-day-header ${isToday ? 'today' : ''}" style="cursor: pointer;" onclick="turnoApp.changeWeekDay('${dateStr}')">
                     <div style="text-transform: capitalize; font-size: 0.85rem;">${dayName}</div>
                     <div style="font-size: 1.2rem;">${dayNum}</div>
@@ -4746,7 +4746,7 @@
 
             // Build Time Axis
             let timeAxisHTML = '<div class="timetable-time-axis">';
-            for(let h = startHour; h <= endHour; h++) {
+            for (let h = startHour; h <= endHour; h++) {
                 const label = `${h.toString().padStart(2, '0')}:00`;
                 timeAxisHTML += `<div class="time-label-slot" style="height: ${slotHeight * 2}px;"><span>${label}</span></div>`;
             }
@@ -4755,35 +4755,35 @@
             // Build Columns
             let columnsHTML = '';
             for (let day of days) {
-                const dayBookings = state.bookings.filter(b => 
-                    b.date === day.dateStr && 
+                const dayBookings = state.bookings.filter(b =>
+                    b.date === day.dateStr &&
                     b.status !== 'Cancelado' &&
                     (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
                 );
 
-                dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+                dayBookings.sort((a, b) => a.time.localeCompare(b.time));
                 const groups = [];
-                for(let b of dayBookings) {
+                for (let b of dayBookings) {
                     const parts = b.time.split(':');
-                    const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                    const startMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
                     const endMin = startMin + (b.duration || 30);
                     b.startMin = startMin;
                     b.endMin = endMin;
-                    
+
                     let placed = false;
-                    for(let g of groups) {
-                        if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                    for (let g of groups) {
+                        if (g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
                             g.push(b);
                             placed = true;
                             break;
                         }
                     }
-                    if(!placed) {
+                    if (!placed) {
                         groups.push([b]);
                     }
                 }
-                
-                for(let g of groups) {
+
+                for (let g of groups) {
                     const count = g.length;
                     g.forEach((b, index) => {
                         b.widthPct = 98 / count;
@@ -4792,7 +4792,7 @@
                 }
 
                 let slotsHTML = '';
-                for(let h = startHour; h <= endHour; h++) {
+                for (let h = startHour; h <= endHour; h++) {
                     const t1 = `${h.toString().padStart(2, '0')}:00`;
                     const t2 = `${h.toString().padStart(2, '0')}:30`;
                     slotsHTML += `<div class="time-slot" style="height: ${slotHeight}px;" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t1}')"></div>`;
@@ -4800,7 +4800,7 @@
                 }
 
                 let bookingsHTML = '';
-                for(let b of dayBookings) {
+                for (let b of dayBookings) {
                     const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
                     const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
                     if (startOffset < 0) continue;
@@ -4815,11 +4815,11 @@
                 }
 
                 let currentTimeHTML = '';
-                if(day.isToday) {
+                if (day.isToday) {
                     const now = new Date();
-                    const nowMin = now.getHours()*60 + now.getMinutes();
-                    if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
-                        const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                    const nowMin = now.getHours() * 60 + now.getMinutes();
+                    if (nowMin >= startHour * 60 && nowMin <= (endHour + 1) * 60) {
+                        const topOffset = (nowMin - (startHour * 60)) * pixelsPerMinute;
                         currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
                     }
                 }
@@ -4845,7 +4845,7 @@
                 if (scrollEl) {
                     const now = new Date();
                     const currentMin = now.getHours() * 60 + now.getMinutes();
-                    let targetScroll = 240; 
+                    let targetScroll = 240;
                     if (currentMin >= 360 && currentMin <= 1380) {
                         targetScroll = (currentMin - 360) * 2 - 40;
                     }
@@ -4871,7 +4871,7 @@
 
         getAdminDayHTML() {
             const dateStr = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-            const dateObj = new Date(dateStr + "T12:00:00"); 
+            const dateObj = new Date(dateStr + "T12:00:00");
             const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
             const startHour = 6;
@@ -4884,36 +4884,36 @@
             </div>`;
 
             let timeAxisHTML = '<div class="timetable-time-axis">';
-            for(let h = startHour; h <= endHour; h++) {
+            for (let h = startHour; h <= endHour; h++) {
                 const label = `${h.toString().padStart(2, '0')}:00`;
                 timeAxisHTML += `<div class="time-label-slot" style="height: ${slotHeight * 2}px;"><span>${label}</span></div>`;
             }
             timeAxisHTML += '</div>';
 
-            const dayBookings = state.bookings.filter(b => 
-                b.date === dateStr && 
+            const dayBookings = state.bookings.filter(b =>
+                b.date === dateStr &&
                 b.status !== 'Cancelado' &&
                 (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
             );
 
-            dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+            dayBookings.sort((a, b) => a.time.localeCompare(b.time));
             const groups = [];
-            for(let b of dayBookings) {
+            for (let b of dayBookings) {
                 const parts = b.time.split(':');
-                const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                const startMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
                 const endMin = startMin + (b.duration || 30);
                 b.startMin = startMin;
                 b.endMin = endMin;
                 let placed = false;
-                for(let g of groups) {
-                    if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                for (let g of groups) {
+                    if (g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
                         g.push(b);
                         placed = true; break;
                     }
                 }
-                if(!placed) groups.push([b]);
+                if (!placed) groups.push([b]);
             }
-            for(let g of groups) {
+            for (let g of groups) {
                 const count = g.length;
                 g.forEach((b, index) => {
                     b.widthPct = 98 / count;
@@ -4922,7 +4922,7 @@
             }
 
             let slotsHTML = '';
-            for(let h = startHour; h <= endHour; h++) {
+            for (let h = startHour; h <= endHour; h++) {
                 const t1 = `${h.toString().padStart(2, '0')}:00`;
                 const t2 = `${h.toString().padStart(2, '0')}:30`;
                 slotsHTML += `<div class="time-slot" style="height: ${slotHeight}px;" onclick="turnoApp.showAdminBookingModal('${dateStr}', '${t1}')"></div>`;
@@ -4930,7 +4930,7 @@
             }
 
             let bookingsHTML = '';
-            for(let b of dayBookings) {
+            for (let b of dayBookings) {
                 const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
                 const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
                 if (startOffset < 0) continue;
@@ -4946,11 +4946,11 @@
 
             let currentTimeHTML = '';
             const isToday = new Date().toISOString().split('T')[0] === dateStr;
-            if(isToday) {
+            if (isToday) {
                 const now = new Date();
-                const nowMin = now.getHours()*60 + now.getMinutes();
-                if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
-                    const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                if (nowMin >= startHour * 60 && nowMin <= (endHour + 1) * 60) {
+                    const topOffset = (nowMin - (startHour * 60)) * pixelsPerMinute;
                     currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
                 }
             }
@@ -4975,7 +4975,7 @@
                 if (scrollEl) {
                     const now = new Date();
                     const currentMin = now.getHours() * 60 + now.getMinutes();
-                    let targetScroll = 240; 
+                    let targetScroll = 240;
                     if (currentMin >= 360 && currentMin <= 1380) {
                         targetScroll = (currentMin - 360) * 2 - 40;
                     }
