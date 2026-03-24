@@ -446,21 +446,20 @@ h4 {
 /* Modal & Toast Styles (ENH-04) */
 .toast {
     position: fixed;
-    bottom: 2rem;
-    right: 2rem;
+    top: 2rem;
+    right: -350px; /* Slide from outside */
     background: white;
     padding: 1rem 2rem;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     border-left: 4px solid var(--primary);
-    transform: translateY(100px);
     opacity: 0;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 2000;
 }
 
 .toast.show {
-    transform: translateY(0);
+    right: 2rem;
     opacity: 1;
 }
 
@@ -614,13 +613,7 @@ h4 {
     cursor: pointer;
 }
 
-/* Move Toast to Center Bottom to avoid overlap */
-.toast {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%) translateY(100px);
-    bottom: 2rem;
-}
+
 
 /* ENH-15: Service Tabs */
 .filters {

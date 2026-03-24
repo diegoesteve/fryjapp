@@ -446,21 +446,20 @@ h4 {
 /* Modal & Toast Styles (ENH-04) */
 .toast {
     position: fixed;
-    bottom: 2rem;
-    right: 2rem;
+    top: 2rem;
+    right: -350px; /* Slide from outside */
     background: white;
     padding: 1rem 2rem;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     border-left: 4px solid var(--primary);
-    transform: translateY(100px);
     opacity: 0;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 2000;
 }
 
 .toast.show {
-    transform: translateY(0);
+    right: 2rem;
     opacity: 1;
 }
 
@@ -614,13 +613,7 @@ h4 {
     cursor: pointer;
 }
 
-/* Move Toast to Center Bottom to avoid overlap */
-.toast {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%) translateY(100px);
-    bottom: 2rem;
-}
+
 
 /* ENH-15: Service Tabs */
 .filters {
@@ -825,7 +818,7 @@ h4 {
     display: flex;
     gap: 1.25rem;
     flex-wrap: wrap;
-    align-items: flex-end; 
+    align-items: flex-end;
     border: 1px solid rgba(226, 232, 240, 0.8);
     transition: all 0.3s ease;
 }
@@ -896,7 +889,8 @@ h4 {
 
 .btn-filter-clear:hover {
     background: #f1f5f9;
-    color: #ef4444; /* Soft red for clear action */
+    color: #ef4444;
+    /* Soft red for clear action */
     border-color: #fca5a5;
 }
 
@@ -905,11 +899,13 @@ h4 {
     border-top: 1px solid var(--border);
     border-left: 1px solid var(--border);
     border-radius: 8px;
-    overflow: hidden; /* So borders curve with the grid */
+    overflow: hidden;
+    /* So borders curve with the grid */
 }
 
 .calendar-day {
-    min-height: 120px; /* Taller cells for more air */
+    min-height: 120px;
+    /* Taller cells for more air */
     border-bottom: 1px solid var(--border);
     border-right: 1px solid var(--border);
     padding: 0.75rem;
@@ -932,7 +928,8 @@ h4 {
 
 .calendar-day.today {
     background: #f0f9ff;
-    box-shadow: inset 0 0 0 2px var(--primary); /* Stronger highlight for today */
+    box-shadow: inset 0 0 0 2px var(--primary);
+    /* Stronger highlight for today */
 }
 
 .calendar-day.today .day-number {
@@ -967,7 +964,7 @@ h4 {
 
 .day-booking-pill:hover {
     transform: translateX(2px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .day-count {
@@ -997,6 +994,158 @@ h4 {
     border-top-color: var(--primary);
     animation: spin 1s ease-in-out infinite;
 }
+
+/* Week Timetable View */
+.timetable-container {
+    position: relative;
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.timetable-header-grid {
+    display: flex;
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 10;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.timetable-time-axis-header {
+    width: 60px;
+    flex-shrink: 0;
+    border-right: 1px solid #e2e8f0;
+}
+
+.timetable-day-header {
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+    padding: 0.5rem;
+    font-weight: 600;
+    border-right: 1px solid #e2e8f0;
+    color: #475569;
+}
+.timetable-day-header.today {
+    background: #f0f9ff;
+    color: var(--primary);
+}
+
+.timetable-body {
+    display: flex;
+    position: relative;
+    background: #fff;
+}
+
+.timetable-time-axis {
+    width: 60px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e2e8f0;
+    background: #fdfdfd;
+}
+
+.time-label-slot {
+    height: 60px; /* 1 hour = 60px (2 slots of 30min) */
+    position: relative;
+    border-bottom: 1px solid transparent;
+}
+.time-label-slot span {
+    position: absolute;
+    top: -10px;
+    right: 8px;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.timetable-day-column {
+    flex: 1;
+    min-width: 120px;
+    border-right: 1px solid #e2e8f0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+.timetable-day-column.today {
+    background: #fafafa;
+}
+
+/* Background slots grid */
+.time-slot {
+    height: 30px; /* 30 minutes */
+    border-bottom: 1px dashed #e2e8f0;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+}
+.time-slot:nth-child(even) {
+    border-bottom: 1px solid #e2e8f0;
+}
+.time-slot:hover {
+    background: rgba(139, 92, 246, 0.05);
+}
+
+/* Booking Block */
+.booking-block {
+    position: absolute;
+    border-radius: 4px;
+    padding: 4px;
+    font-size: 0.75rem;
+    color: white;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+    z-index: 5;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+.booking-block:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+    z-index: 6;
+}
+.booking-title {
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.booking-subtitle {
+    font-size: 0.65rem;
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.1;
+}
+
+/* Current Time Line */
+.current-time-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #ef4444;
+    z-index: 8;
+    pointer-events: none;
+}
+.current-time-indicator {
+    position: absolute;
+    left: -6px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ef4444;
+}
+
 
 @keyframes spin {
     to {

@@ -508,40 +508,12 @@
             if (footerText) footerText.innerHTML = `&copy; ${new Date().getFullYear()} ${state.settings.clinicName}. Todos los derechos reservados.<br><br>📍 ${state.settings.address} | ✉ ${state.settings.email} | 📞 ${state.settings.phone}`;
         },
 
-        showNotification(message, position = 'bottom') {
+        showNotification(message) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            
-            // Handle placement
-            if (position === 'top-right') {
-                toast.style.top = '2rem';
-                toast.style.right = '2rem';
-                toast.style.bottom = 'auto';
-                toast.style.left = 'auto';
-                toast.style.transform = 'none'; // Overrides the default centered transform
-            } else {
-                // Default bottom-center
-                toast.style.top = 'auto';
-                toast.style.right = 'auto';
-                toast.style.bottom = '2rem';
-                toast.style.left = '50%';
-                toast.style.transform = 'translateX(-50%) translateY(100px)'; // Standard appearance
-            }
-
             toast.classList.add('show');
-            
-            // Once show is added, if we are default, it handles it via CSS `.show { transform: translateX(-50%) translateY(0); }`.
-            // For top-right, `transform: none` stays as is, we just rely on opacity.
-            if (position === 'top-right') {
-                toast.style.opacity = '1';
-                toast.style.transition = 'opacity 0.3s ease';
-            }
-
             setTimeout(() => {
                 toast.classList.remove('show');
-                if (position === 'top-right') {
-                    toast.style.opacity = '0';
-                }
             }, 3000);
         },
 
@@ -2755,6 +2727,13 @@
             this.renderAdmin();
         },
 
+        getProfColor(profId) {
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#f43f5e', '#84cc16', '#6366f1'];
+            let hash = 0;
+            if (profId) hash = parseInt(profId);
+            return colors[hash % colors.length] || '#64748b';
+        },
+
         getAdminWeekHTML() {
             const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
             const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
@@ -2766,8 +2745,13 @@
             const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
             const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
-            let weekGrid = `<div class="week-view-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; overflow-x: auto;">`;
+            const startHour = 6;
+            const endHour = 23;
+            const pixelsPerMinute = 1; // 1 min = 1px
 
+            // Build Header
+            let headerHTML = '<div class="timetable-header-grid"><div class="timetable-time-axis-header"></div>';
+            const days = [];
             for (let i = 0; i < 7; i++) {
                 const dayDate = new Date(startOfWeek);
                 dayDate.setDate(startOfWeek.getDate() + i);
@@ -2775,38 +2759,121 @@
                 const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
                 const dayNum = dayDate.getDate();
                 const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                const isSelected = state.agendaView.selectedDay && new Date(state.agendaView.selectedDay).toISOString().split('T')[0] === dateStr;
+                
+                days.push({dateStr, dayDate, isToday});
+                headerHTML += `<div class="timetable-day-header ${isToday ? 'today' : ''}">
+                    <div style="text-transform: capitalize; font-size: 0.85rem;">${dayName}</div>
+                    <div style="font-size: 1.2rem;">${dayNum}</div>
+                </div>`;
+            }
+            headerHTML += '</div>';
 
-                // Filter by professional if selected
-                const dayBookings = state.bookings.filter(b =>
-                    b.date === dateStr &&
+            // Build Time Axis
+            let timeAxisHTML = '<div class="timetable-time-axis">';
+            for(let h = startHour; h <= endHour; h++) {
+                const label = `${h.toString().padStart(2, '0')}:00`;
+                timeAxisHTML += `<div class="time-label-slot"><span>${label}</span></div>`;
+            }
+            timeAxisHTML += '</div>';
+
+            // Build Columns
+            let columnsHTML = '';
+            for (let day of days) {
+                const dayBookings = state.bookings.filter(b => 
+                    b.date === day.dateStr && 
                     b.status !== 'Cancelado' &&
                     (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
                 );
 
-                weekGrid += `
-                        <div class="week-day-column ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" 
-                             style="min-width: 100px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem; background: ${isToday ? '#f0f9ff' : 'white'}; position: relative;">
-                             <button onclick="turnoApp.showAdminBookingModal('${dateStr}')" style="position: absolute; top: 4px; right: 4px; background: none; border: none; font-size: 1.1rem; line-height: 1; color: var(--primary); cursor: pointer; padding: 0; opacity: 0.6;" title="Nuevo Turno">+</button>
-                            <div onclick="turnoApp.changeWeekDay('${dateStr}')" style="cursor: pointer;">
-                                <div style="font-weight: 600; text-align: center; margin-bottom: 0.5rem; color: #64748b; text-transform: capitalize;">${dayName} ${dayNum}</div>
-                                <div class="day-bookings-list" style="display: flex; flex-direction: column; gap: 0.25rem;">
-                                    ${dayBookings.length > 0 ? dayBookings.map(b => `
-                                        <div style="background: ${this.getServiceColor(b.serviceId)}; color: white; padding: 4px 6px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${b.time} - ${b.clientName}">
-                                            ${b.time} ${b.clientName.split(' ')[0]}
-                                        </div>
-                                    `).join('') : '<div style="color: #cbd5e1; text-align: center; font-size: 1.5rem;">·</div>'}
-                                </div>
-                            </div>
-                        </div>`;
+                // Overlap resolver algorithm
+                dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+                const groups = [];
+                for(let b of dayBookings) {
+                    const parts = b.time.split(':');
+                    const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                    const endMin = startMin + (b.duration || 30);
+                    b.startMin = startMin;
+                    b.endMin = endMin;
+                    
+                    let placed = false;
+                    for(let g of groups) {
+                        if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                            g.push(b);
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if(!placed) {
+                        groups.push([b]);
+                    }
+                }
+                
+                for(let g of groups) {
+                    const count = g.length;
+                    g.forEach((b, index) => {
+                        b.widthPct = 95 / count;
+                        b.leftPct = (100 / count) * index;
+                    });
+                }
+
+                // Render Background Slots
+                let slotsHTML = '';
+                for(let h = startHour; h <= endHour; h++) {
+                    const t1 = `${h.toString().padStart(2, '0')}:00`;
+                    const t2 = `${h.toString().padStart(2, '0')}:30`;
+                    slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t1}')"></div>`;
+                    slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t2}')"></div>`;
+                }
+
+                // Render Bookings Objects
+                let bookingsHTML = '';
+                for(let b of dayBookings) {
+                    const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
+                    const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
+                    
+                    if (startOffset < 0) continue;
+
+                    bookingsHTML += `
+                    <div class="booking-block" 
+                         onclick="event.stopPropagation(); turnoApp.editBooking(${b.id})"
+                         style="top: ${startOffset}px; height: ${bHeight}px; left: ${b.leftPct}%; width: ${b.widthPct}%; background: ${turnoApp.getProfColor(b.professionalId)};">
+                        <div class="booking-title">${b.time} ${b.clientName.split(' ')[0]}</div>
+                        <div class="booking-subtitle">${b.serviceName}</div>
+                    </div>`;
+                }
+
+                // Render Red Line if Today matches
+                let currentTimeHTML = '';
+                if(day.isToday) {
+                    const now = new Date();
+                    const nowMin = now.getHours()*60 + now.getMinutes();
+                    if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
+                        const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                        currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
+                    }
+                }
+
+                columnsHTML += `<div class="timetable-day-column ${day.isToday ? 'today' : ''}">
+                    ${slotsHTML}
+                    ${bookingsHTML}
+                    ${currentTimeHTML}
+                </div>`;
             }
-            weekGrid += `</div>`;
+
+            let weekGrid = `
+            <div class="timetable-container" id="week-timetable-scroll">
+                ${headerHTML}
+                <div class="timetable-body">
+                    ${timeAxisHTML}
+                    ${columnsHTML}
+                </div>
+            </div>`;
 
             return `
                     <div class="calendar-container">
-                        <div class="calendar-header">
+                        <div class="calendar-header" style="margin-bottom: 1rem;">
                              <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">←</button>
-                             <h3>Semana ${startStr} - ${endStr}</h3>
+                             <h3 style="margin: 0; display: flex; align-items: center;">Semana ${startStr} - ${endStr}</h3>
                              <button onclick="turnoApp.changeWeek(1)" class="btn-icon">→</button>
                         </div>
                         ${weekGrid}
@@ -3226,6 +3293,21 @@
                 </div>
             </section>
         `;
+        
+            if (viewMode === 'week') {
+                requestAnimationFrame(() => {
+                    const scrollEl = document.getElementById('week-timetable-scroll');
+                    if (scrollEl) {
+                        const now = new Date();
+                        const currentMin = now.getHours() * 60 + now.getMinutes();
+                        let targetScroll = 120; // 08:00 default
+                        if (currentMin >= 360 && currentMin <= 1380) {
+                            targetScroll = currentMin - 360 - 30; // 30px padding above current time
+                        }
+                        scrollEl.scrollTop = Math.max(0, targetScroll);
+                    }
+                });
+            }
         },
 
         getAdminListHTML() {
@@ -3392,7 +3474,7 @@
                 calendarGrid += `
                 <div class="calendar-day ${isToday ? 'today' : ''}" style="position: relative;">
                     <button onclick="turnoApp.showAdminBookingModal('${dateStr}')" style="position: absolute; top: 4px; right: 4px; background: none; border: none; font-size: 1.2rem; line-height: 1; color: var(--primary); cursor: pointer; padding: 0; opacity: 0.6; z-index: 2;" title="Nuevo Turno">+</button>
-                    <div class="day-content" onclick="turnoApp.showDayDetails('${dateStr}')" style="height: 100%;">
+                    <div class="day-content" onclick="${dayBookings.length > 0 ? `turnoApp.showDayDetails('${dateStr}')` : `turnoApp.showAdminBookingModal('${dateStr}')`}" style="height: 100%;">
                         <div class="day-number">${d}</div>
                         ${dayBookings.length > 0 ? `
                             <div class="day-indicators" style="display:flex; flex-direction:column; gap:2px; margin-top:4px;">
@@ -4614,10 +4696,23 @@
             }
         },
 
+        getServiceColor(serviceId) {
+            // Helper to color code bookings by service
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+            return colors[serviceId % colors.length] || '#64748b';
+        },
+
+        getProfColor(profId) {
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#f43f5e', '#84cc16', '#6366f1'];
+            let hash = 0;
+            if (profId) hash = parseInt(profId);
+            return colors[hash % colors.length] || '#64748b';
+        },
+
         getAdminWeekHTML() {
             const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
-            const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
-            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
+            const dayOfWeek = currentDate.getDay(); 
+            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
             const startOfWeek = new Date(currentDate.setDate(diff));
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -4625,8 +4720,14 @@
             const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
             const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
-            let weekGrid = `<div class="week-view-container" style="display: flex; gap: 10px; overflow-x: auto;">`;
+            const startHour = 6;
+            const endHour = 23;
+            const pixelsPerMinute = 2; // 1 min = 2px
+            const slotHeight = 60; // 30 mins = 60px
 
+            // Build Header
+            let headerHTML = '<div class="timetable-header-grid"><div class="timetable-time-axis-header"></div>';
+            const days = [];
             for (let i = 0; i < 7; i++) {
                 const dayDate = new Date(startOfWeek);
                 dayDate.setDate(startOfWeek.getDate() + i);
@@ -4634,110 +4735,263 @@
                 const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
                 const dayNum = dayDate.getDate();
                 const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                const isSelected = state.agendaView.selectedDay && new Date(state.agendaView.selectedDay).toISOString().split('T')[0] === dateStr;
-
-                const dayBookings = state.bookings.filter(b => b.date === dateStr && b.status !== 'Cancelado');
-
-                weekGrid += `
-                <div class="week-day-column ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" 
-                     onclick="turnoApp.showDayDetails('${dateStr}')" 
-                     style="flex: 1; min-width: 120px; border: 1px solid #eee; border-radius: 8px; padding: 10px; background: ${isToday ? '#f0f9ff' : 'white'}; cursor: pointer;">
-                    <div style="font-weight: bold; text-align: center; margin-bottom: 5px; color: #555;">${dayName} ${dayNum}</div>
-                    <div class="day-bookings-list" style="font-size: 0.8rem;">
-                        ${dayBookings.length > 0 ? dayBookings.map(b => `
-                            <div style="background: ${this.getServiceColor(b.serviceId)}; color: white; padding: 2px 4px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                ${b.time} ${b.clientName.split(' ')[0]}
-                            </div>
-                        `).join('') : '<div style="color: #ccc; text-align: center;">-</div>'}
-                    </div>
+                
+                days.push({dateStr, dayDate, isToday});
+                headerHTML += `<div class="timetable-day-header ${isToday ? 'today' : ''}" style="cursor: pointer;" onclick="turnoApp.changeWeekDay('${dateStr}')">
+                    <div style="text-transform: capitalize; font-size: 0.85rem;">${dayName}</div>
+                    <div style="font-size: 1.2rem;">${dayNum}</div>
                 </div>`;
             }
-            weekGrid += `</div>`;
+            headerHTML += '</div>';
+
+            // Build Time Axis
+            let timeAxisHTML = '<div class="timetable-time-axis">';
+            for(let h = startHour; h <= endHour; h++) {
+                const label = `${h.toString().padStart(2, '0')}:00`;
+                timeAxisHTML += `<div class="time-label-slot" style="height: ${slotHeight * 2}px;"><span>${label}</span></div>`;
+            }
+            timeAxisHTML += '</div>';
+
+            // Build Columns
+            let columnsHTML = '';
+            for (let day of days) {
+                const dayBookings = state.bookings.filter(b => 
+                    b.date === day.dateStr && 
+                    b.status !== 'Cancelado' &&
+                    (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
+                );
+
+                dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+                const groups = [];
+                for(let b of dayBookings) {
+                    const parts = b.time.split(':');
+                    const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                    const endMin = startMin + (b.duration || 30);
+                    b.startMin = startMin;
+                    b.endMin = endMin;
+                    
+                    let placed = false;
+                    for(let g of groups) {
+                        if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                            g.push(b);
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if(!placed) {
+                        groups.push([b]);
+                    }
+                }
+                
+                for(let g of groups) {
+                    const count = g.length;
+                    g.forEach((b, index) => {
+                        b.widthPct = 98 / count;
+                        b.leftPct = (100 / count) * index;
+                    });
+                }
+
+                let slotsHTML = '';
+                for(let h = startHour; h <= endHour; h++) {
+                    const t1 = `${h.toString().padStart(2, '0')}:00`;
+                    const t2 = `${h.toString().padStart(2, '0')}:30`;
+                    slotsHTML += `<div class="time-slot" style="height: ${slotHeight}px;" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t1}')"></div>`;
+                    slotsHTML += `<div class="time-slot" style="height: ${slotHeight}px;" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t2}')"></div>`;
+                }
+
+                let bookingsHTML = '';
+                for(let b of dayBookings) {
+                    const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
+                    const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
+                    if (startOffset < 0) continue;
+
+                    bookingsHTML += `
+                    <div class="booking-block" 
+                         onclick="event.stopPropagation(); turnoApp.editBooking(${b.id})"
+                         style="top: ${startOffset}px; height: ${bHeight}px; left: ${b.leftPct}%; width: ${b.widthPct}%; background: ${turnoApp.getProfColor(b.professionalId)};">
+                        <div class="booking-title">${b.time} ${b.clientName.split(' ')[0]}</div>
+                        <div class="booking-subtitle">${b.serviceName}</div>
+                    </div>`;
+                }
+
+                let currentTimeHTML = '';
+                if(day.isToday) {
+                    const now = new Date();
+                    const nowMin = now.getHours()*60 + now.getMinutes();
+                    if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
+                        const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                        currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
+                    }
+                }
+
+                columnsHTML += `<div class="timetable-day-column ${day.isToday ? 'today' : ''}">
+                    ${slotsHTML}
+                    ${bookingsHTML}
+                    ${currentTimeHTML}
+                </div>`;
+            }
+
+            let weekGrid = `
+            <div class="timetable-container" id="week-timetable-scroll">
+                ${headerHTML}
+                <div class="timetable-body">
+                    ${timeAxisHTML}
+                    ${columnsHTML}
+                </div>
+            </div>`;
+
+            requestAnimationFrame(() => {
+                const scrollEl = document.getElementById('week-timetable-scroll');
+                if (scrollEl) {
+                    const now = new Date();
+                    const currentMin = now.getHours() * 60 + now.getMinutes();
+                    let targetScroll = 240; 
+                    if (currentMin >= 360 && currentMin <= 1380) {
+                        targetScroll = (currentMin - 360) * 2 - 40;
+                    }
+                    scrollEl.scrollTop = Math.max(0, targetScroll);
+                }
+            });
 
             return `
-            <div class="calendar-container">
-                <div class="calendar-header">
-                     <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">â† </button>
-                     <h3>Semana ${startStr} - ${endStr}</h3>
-                     <button onclick="turnoApp.changeWeek(1)" class="btn-icon">â†’ </button>
-                </div>
-                ${weekGrid}
-            </div>`;
+                    <div class="calendar-container">
+                        <div class="calendar-header" style="margin-bottom: 1rem;">
+                             <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">←</button>
+                             <h3 style="margin: 0; display: flex; align-items: center;">Semana ${startStr} - ${endStr}</h3>
+                             <button onclick="turnoApp.changeWeek(1)" class="btn-icon">→</button>
+                        </div>
+                        ${weekGrid}
+                    </div>`;
         },
 
-        changeWeek(direction) {
-            const current = new Date(state.agendaView.selectedDay || new Date());
-            current.setDate(current.getDate() + (direction * 7));
-            state.agendaView.selectedDay = current;
-            state.agendaView.calendarMonth = current.getMonth();
-            state.agendaView.calendarYear = current.getFullYear();
-            this.renderAdmin();
+        changeWeekDay(dateStr) {
+            state.agendaView.selectedDay = new Date(dateStr + "T12:00:00");
+            this.setAdminViewMode('day');
         },
 
         getAdminDayHTML() {
             const dateStr = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-            const dateObj = new Date(dateStr + 'T12:00:00'); // Safe date parsing
+            const dateObj = new Date(dateStr + "T12:00:00"); 
             const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-            const dayBookings = state.bookings
-                .filter(b => b.date === dateStr && b.status !== 'Cancelado')
-                .sort((a, b) => a.time.localeCompare(b.time));
+            const startHour = 6;
+            const endHour = 23;
+            const pixelsPerMinute = 2; // 1 min = 2px
+            const slotHeight = 60; // 30 mins = 60px
 
-            // Grid 8am - 8pm
-            const hours = [];
-            for (let h = 8; h <= 20; h++) {
-                hours.push(`${h.toString().padStart(2, '0')}:00`);
+            let headerHTML = `<div class="timetable-header-grid"><div class="timetable-time-axis-header"></div>
+                <div class="timetable-day-header today" style="text-transform: capitalize; font-size: 1.1rem;">${prettyDate}</div>
+            </div>`;
+
+            let timeAxisHTML = '<div class="timetable-time-axis">';
+            for(let h = startHour; h <= endHour; h++) {
+                const label = `${h.toString().padStart(2, '0')}:00`;
+                timeAxisHTML += `<div class="time-label-slot" style="height: ${slotHeight * 2}px;"><span>${label}</span></div>`;
+            }
+            timeAxisHTML += '</div>';
+
+            const dayBookings = state.bookings.filter(b => 
+                b.date === dateStr && 
+                b.status !== 'Cancelado' &&
+                (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
+            );
+
+            dayBookings.sort((a,b) => a.time.localeCompare(b.time));
+            const groups = [];
+            for(let b of dayBookings) {
+                const parts = b.time.split(':');
+                const startMin = parseInt(parts[0])*60 + parseInt(parts[1]);
+                const endMin = startMin + (b.duration || 30);
+                b.startMin = startMin;
+                b.endMin = endMin;
+                let placed = false;
+                for(let g of groups) {
+                    if(g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
+                        g.push(b);
+                        placed = true; break;
+                    }
+                }
+                if(!placed) groups.push([b]);
+            }
+            for(let g of groups) {
+                const count = g.length;
+                g.forEach((b, index) => {
+                    b.widthPct = 98 / count;
+                    b.leftPct = (100 / count) * index;
+                });
             }
 
-            let dayGrid = `<div class="day-view-container" style="display: flex; flex-direction: column; gap: 5px;">`;
-
-            // Simple list for now, timeline view is complex
-            if (dayBookings.length === 0) {
-                dayGrid += `<div style="padding: 2rem; text-align: center; color: #666;">No hay turnos para este dÃ­a.</div>`;
-            } else {
-                dayGrid += dayBookings.map(b => `
-                    <div style="display: flex; gap: 1rem; padding: 10px; border: 1px solid #eee; border-radius: 8px; align-items: center; background: white;">
-                        <div style="font-weight: bold; width: 60px; color: var(--primary);">${b.time}</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600;">${b.serviceName} (${b.duration} min)</div>
-                            <div style="font-size: 0.9rem; color: #555;">${b.clientName}</div>
-                            <div style="font-size: 0.8rem; color: #888;">${b.professionalName}</div>
-                        </div>
-                        <div>
-                             <span class="status-badge ${b.status === 'Confirmado' ? 'confirmado' : 'pendiente'}">${b.status}</span>
-                        </div>
-                        <div>
-                             <button onclick="turnoApp.editBooking(${b.id})" class="btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">Editar</button>
-                        </div>
-                    </div>
-                 `).join('');
+            let slotsHTML = '';
+            for(let h = startHour; h <= endHour; h++) {
+                const t1 = `${h.toString().padStart(2, '0')}:00`;
+                const t2 = `${h.toString().padStart(2, '0')}:30`;
+                slotsHTML += `<div class="time-slot" style="height: ${slotHeight}px;" onclick="turnoApp.showAdminBookingModal('${dateStr}', '${t1}')"></div>`;
+                slotsHTML += `<div class="time-slot" style="height: ${slotHeight}px;" onclick="turnoApp.showAdminBookingModal('${dateStr}', '${t2}')"></div>`;
             }
-            dayGrid += `</div>`;
+
+            let bookingsHTML = '';
+            for(let b of dayBookings) {
+                const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
+                const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
+                if (startOffset < 0) continue;
+
+                bookingsHTML += `
+                <div class="booking-block" 
+                     onclick="event.stopPropagation(); turnoApp.editBooking(${b.id})"
+                     style="top: ${startOffset}px; height: ${bHeight}px; left: ${b.leftPct}%; width: ${b.widthPct}%; background: ${turnoApp.getProfColor(b.professionalId)}; padding: 6px;">
+                    <div class="booking-title" style="font-size: 0.9rem;">${b.time} ${b.clientName}</div>
+                    <div class="booking-subtitle" style="font-size: 0.75rem;">${b.serviceName}</div>
+                </div>`;
+            }
+
+            let currentTimeHTML = '';
+            const isToday = new Date().toISOString().split('T')[0] === dateStr;
+            if(isToday) {
+                const now = new Date();
+                const nowMin = now.getHours()*60 + now.getMinutes();
+                if(nowMin >= startHour*60 && nowMin <= (endHour+1)*60) {
+                    const topOffset = (nowMin - (startHour*60)) * pixelsPerMinute;
+                    currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
+                }
+            }
+
+            let columnsHTML = `<div class="timetable-day-column today">
+                ${slotsHTML}
+                ${bookingsHTML}
+                ${currentTimeHTML}
+            </div>`;
+
+            let dayGrid = `
+            <div class="timetable-container" id="day-timetable-scroll">
+                ${headerHTML}
+                <div class="timetable-body">
+                    ${timeAxisHTML}
+                    ${columnsHTML}
+                </div>
+            </div>`;
+
+            requestAnimationFrame(() => {
+                const scrollEl = document.getElementById('day-timetable-scroll');
+                if (scrollEl) {
+                    const now = new Date();
+                    const currentMin = now.getHours() * 60 + now.getMinutes();
+                    let targetScroll = 240; 
+                    if (currentMin >= 360 && currentMin <= 1380) {
+                        targetScroll = (currentMin - 360) * 2 - 40;
+                    }
+                    scrollEl.scrollTop = Math.max(0, targetScroll);
+                }
+            });
 
             return `
             <div class="calendar-container">
-                <div class="calendar-header">
-                     <button onclick="turnoApp.changeDay(-1)" class="btn-icon">â† </button>
-                     <h3>${prettyDate}</h3>
-                     <button onclick="turnoApp.changeDay(1)" class="btn-icon">â†’ </button>
+                <div class="calendar-header" style="margin-bottom: 1rem;">
+                     <button onclick="turnoApp.changeDay(-1)" class="btn-icon">←</button>
+                     <h3 style="margin: 0; display: flex; align-items: center;">${prettyDate}</h3>
+                     <button onclick="turnoApp.changeDay(1)" class="btn-icon">→</button>
                 </div>
                 ${dayGrid}
             </div>`;
-        },
-
-        changeDay(direction) {
-            const current = new Date(state.agendaView.selectedDay || new Date());
-            current.setDate(current.getDate() + direction);
-            state.agendaView.selectedDay = current;
-            state.agendaView.calendarMonth = current.getMonth();
-            state.agendaView.calendarYear = current.getFullYear();
-            this.renderAdmin();
-        },
-
-        getServiceColor(serviceId) {
-            // Helper to color code bookings by service
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-            return colors[serviceId % colors.length] || '#64748b';
         },
 
     };
