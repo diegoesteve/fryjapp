@@ -4,7 +4,6 @@
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb2FwdHNtdWxzdXZkdGVwaW90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MDgwNTgsImV4cCI6MjA4NDk4NDA1OH0.yvk_xOmDQFLgqNmvjJUd9Cnwvvm90Bnd26MrlyJj6bU';
     let supabase;
 
-
     // State
     const state = {
         services: [], // Will be fetched from DB
