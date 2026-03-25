@@ -9,6 +9,7 @@ create table public.profiles (
   name text,
   role text check (role in ('admin', 'professional', 'patient')),
   phone text,
+  mrn text unique, -- Medical Record Number, format ELV-XXXX-0000
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -17,6 +18,56 @@ alter table public.profiles enable row level security;
 create policy "Public profiles are viewable by everyone" on public.profiles for select using (true);
 create policy "Users can insert their own profile" on public.profiles for insert with check (auth.uid() = id);
 create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id);
+
+-- MRN Generation Function and Trigger
+CREATE OR REPLACE FUNCTION generate_patient_mrn()
+RETURNS TRIGGER AS $$
+DECLARE
+    new_mrn TEXT;
+    is_unique BOOLEAN := FALSE;
+    letters TEXT := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    random_letters TEXT;
+    random_digits TEXT;
+BEGIN
+    -- Enforce immutability on UPDATE
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.mrn IS NOT NULL AND NEW.mrn IS DISTINCT FROM OLD.mrn THEN
+            NEW.mrn := OLD.mrn;
+        END IF;
+    END IF;
+
+    -- Only generate MRN for patients who don't have one
+    IF NEW.role = 'patient' AND NEW.mrn IS NULL THEN
+        WHILE NOT is_unique LOOP
+            -- Generate 4 random letters
+            random_letters := substring(letters from (floor(random() * 26 + 1)::int) for 1) ||
+                              substring(letters from (floor(random() * 26 + 1)::int) for 1) ||
+                              substring(letters from (floor(random() * 26 + 1)::int) for 1) ||
+                              substring(letters from (floor(random() * 26 + 1)::int) for 1);
+            
+            -- Generate 4 random digits
+            random_digits := lpad(floor(random() * 10000)::text, 4, '0');
+            
+            new_mrn := 'ELV-' || random_letters || '-' || random_digits;
+            
+            -- Check for collision
+            PERFORM 1 FROM public.profiles WHERE mrn = new_mrn;
+            IF NOT FOUND THEN
+                is_unique := TRUE;
+            END IF;
+        END LOOP;
+        
+        NEW.mrn := new_mrn;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER ensure_patient_mrn
+BEFORE INSERT OR UPDATE ON public.profiles
+FOR EACH ROW
+EXECUTE FUNCTION generate_patient_mrn();
 
 -- 2. SERVICES
 create table public.services (

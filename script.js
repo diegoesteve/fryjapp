@@ -12,6 +12,7 @@
         bookings: [], // Will be fetched from DB
         inventoryProducts: [], // Will be fetched from DB
         inventoryRequests: [], // Will be fetched from DB
+        inventoryVials: [], // Temporary mock for injectable tracking
         currentUser: null, // Managed by Supabase Auth
         currentView: 'home',
         bookingFor: null,
@@ -73,6 +74,9 @@
                     this.fetchProfessionals(),
                     this.fetchInventoryProducts()
                 ]);
+
+                // 2.5 Load Mock Vials Support for the Treatment Chart
+                await this.fetchInventoryVials();
 
                 // Also fetch requests if logged in
                 if (session) {
@@ -162,6 +166,25 @@
                     ...p,
                     stock: p.stock && p.stock.length > 0 ? p.stock[0] : { total_quantity: 0, available_quantity: 0, reserved_quantity: 0 }
                 }));
+            }
+        },
+
+        async fetchInventoryVials() {
+            // Mock Vials data until inventory_vials table exists
+            state.inventoryVials = [
+                { id: 1, product_id: 1, asset_code: 'BXT-2024-001', lot: 'L2301A', expiration_date: '2025-12-31', available_quantity: 100 },
+                { id: 2, product_id: 1, asset_code: 'BXT-2024-002', lot: 'L2302A', expiration_date: '2025-12-31', available_quantity: 50 },
+                { id: 3, product_id: 2, asset_code: 'HA-2024-001', lot: 'L2305B', expiration_date: '2025-06-30', available_quantity: 2 }
+            ];
+            
+            // Map product IDs dynamically if db IDs differ from mock IDs for injectables (vial unit_type)
+            const vialProducts = state.inventoryProducts.filter(p => p.unit_type === 'vial');
+            if (vialProducts.length > 0) {
+                state.inventoryVials[0].product_id = vialProducts[0].id;
+                state.inventoryVials[1].product_id = vialProducts[0].id;
+                if (vialProducts.length > 1) {
+                    state.inventoryVials[2].product_id = vialProducts[1].id;
+                }
             }
         },
 
@@ -1373,8 +1396,8 @@
                     <div style="overflow-x: auto;">
                         <table class="admin-table">
                             <thead>
-                                <tr>
                                     <th>Nombre</th>
+                                    <th>MRN</th>
                                     <th>Email</th>
                                     <th>Teléfono</th>
                                     <th>Última Visita</th>
@@ -1385,8 +1408,8 @@
                             </thead>
                             <tbody id="patients-table-body">
                                 ${visiblePatients.length ? visiblePatients.map(p => `
-                                    <tr>
                                         <td>${p.name}</td>
+                                        <td style="font-family: monospace; font-size: 0.85rem; color: #4f46e5;">${p.mrn || '-'}</td>
                                         <td>${p.email}</td>
                                         <td>${p.phone}</td>
                                         <td>${p.lastVisit}</td>
@@ -2177,7 +2200,8 @@
             const filtered = this.currentPatientList.filter(p =>
                 p.name.toLowerCase().includes(lowerQuery) ||
                 p.email.toLowerCase().includes(lowerQuery) ||
-                (p.phone && p.phone.includes(query))
+                (p.phone && p.phone.includes(query)) ||
+                (p.mrn && p.mrn.toLowerCase().includes(lowerQuery))
             );
 
             if (filtered.length === 0) {
@@ -2188,6 +2212,7 @@
             tbody.innerHTML = filtered.map(p => `
             <tr>
                 <td>${p.name}</td>
+                <td style="font-family: monospace; font-size: 0.85rem; color: #4f46e5;">${p.mrn || '-'}</td>
                 <td>${p.email}</td>
                 <td>${p.phone}</td>
                 <td>${p.lastVisit}</td>
@@ -2262,15 +2287,21 @@
 
             const newUserId = authData.user?.id;
 
+            let newPatientMrn = null;
+
             if (newUserId) {
-                // Insert into 'profiles' globally
-                await supabase.from('profiles').upsert({
+                // Insert into 'profiles' globally and fetch the auto-generated MRN
+                const { data, error: profileErr } = await supabase.from('profiles').upsert({
                     id: newUserId,
                     email: email,
                     name: name,
                     phone: phone,
                     role: 'patient'
-                });
+                }).select('mrn').single();
+
+                if (data && data.mrn) {
+                    newPatientMrn = data.mrn;
+                }
             }
 
             // 1. Create Patient Record Locally
@@ -2279,6 +2310,7 @@
                 name,
                 email,
                 phone,
+                mrn: newPatientMrn,
                 lastVisit: '-',
                 totalVisits: 0
             };
@@ -2324,9 +2356,11 @@
                         <div style="background: white; padding: 2rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); height: fit-content;">
                             <div style="text-align: center; margin-bottom: 1.5rem;">
                                 <div style="width: 80px; height: 80px; background: #eee; border-radius: 50%; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center;">
-                                    <i data-lucide="user" size="40" style="color: #666;"></i>
                                 </div>
-                                <h3>${p.name}</h3>
+                                <h3 style="margin-bottom: 0.25rem;">${p.name}</h3>
+                                <div style="font-family: monospace; background: #eef2ff; color: #4f46e5; padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                                    ${p.mrn || 'Sin MRN'}
+                                </div>
                                 <p style="color: #666;">${p.email}</p>
                             </div>
                             <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
@@ -2444,30 +2478,118 @@
             const booking = state.bookings.find(b => b.id === bookingId);
             if (!booking) return;
 
+            const service = state.services.find(s => s.id === booking.serviceId) || {};
+            const basePrice = booking.price || service.price || 0;
+            const patient = state.patients.find(p => p.email === booking.clientEmail) || {};
+            const currentUser = state.currentUser;
+
             const content = `
-            <h3 class="mb-4">Registrar Visita</h3>
-            <p style="color: #666; margin-bottom: 1rem;">${booking.serviceName} - ${booking.clientName}</p>
+            <h3 class="mb-4">Completar Historia</h3>
+            
+            <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
+                <h4 style="margin-top: 0; margin-bottom: 1rem; color: #334155; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em;">Detalles del Paciente</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.9rem;">
+                    <div>
+                        <span style="color: #64748b; display: block; font-size: 0.8rem; margin-bottom: 0.2rem;">Nombre completo</span>
+                        <strong>${booking.clientName}</strong>
+                    </div>
+                    <div>
+                        <span style="color: #64748b; display: block; font-size: 0.8rem; margin-bottom: 0.2rem;">MRN</span>
+                        <span style="font-family: monospace; background: #eef2ff; color: #4f46e5; padding: 0.15rem 0.4rem; border-radius: 3px; font-weight: 600;">${patient.mrn || 'N/A'}</span>
+                    </div>
+                    <div>
+                        <span style="color: #64748b; display: block; font-size: 0.8rem; margin-bottom: 0.2rem;">Fecha del turno</span>
+                        <strong>${booking.date} a las ${booking.time}</strong>
+                    </div>
+                    <div>
+                        <span style="color: #64748b; display: block; font-size: 0.8rem; margin-bottom: 0.2rem;">Profesional a cargo</span>
+                        <strong>${currentUser.name}</strong>
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <span style="color: #64748b; display: block; font-size: 0.8rem; margin-bottom: 0.2rem;">Servicio(s)</span>
+                        <strong>${booking.serviceName}</strong>
+                    </div>
+                </div>
+            </div>
+
             <form onsubmit="turnoApp.saveVisit(event, ${bookingId})">
                 <div class="form-group">
                     <label class="form-label">Tratamiento Realizado</label>
                     <input type="text" name="treatment" class="form-input" value="${booking.serviceName}" required>
                 </div>
                  <div class="form-group">
-                    <label class="form-label">Unidades / Detalles</label>
+                    <label class="form-label">Unidades / Detalles Generales</label>
                     <input type="text" name="units" class="form-input" placeholder="Ej: 2 viales, 1 sesión...">
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Precio Cobrado ($)</label>
-                    <input type="number" name="price" class="form-input" required>
+
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h4 style="margin: 0;">Productos Utilizados</h4>
+                    <button type="button" class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.85rem;" onclick="turnoApp.addVisitProductRow()">
+                        <i data-lucide="plus" style="width: 14px; height: 14px; display: inline-block;"></i> Agregar producto
+                    </button>
                 </div>
+                
+                <div style="overflow-x: auto; margin-bottom: 1rem;">
+                    <table class="admin-table" style="font-size: 0.85rem;" id="visit-products-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Producto</th>
+                                <th style="width: 25%;">Vial / Lote</th>
+                                <th style="width: 15%;">Cantidad</th>
+                                <th style="width: 15%;">Precio Unit.</th>
+                                <th style="width: 15%;">Total Línea</th>
+                                <th style="width: 5%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="visit-products-list">
+                            <!-- JS injected rows -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
+                <h4 style="margin-bottom: 1rem;">Precios y Pago</h4>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Subtotal ($)</label>
+                        <input type="number" id="visit-subtotal" name="subtotal" class="form-input" value="${basePrice}" readonly style="background-color: #f8fafc; cursor: not-allowed;">
+                        <small style="color: #666; font-size: 0.75rem;">(Incluye servicio y productos)</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Descuento ($)</label>
+                        <input type="number" id="visit-discount" name="discount" class="form-input" value="0" min="0" oninput="turnoApp.calculateVisitTotal()">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 600;">Total a Cobrar ($)</label>
+                    <input type="number" id="visit-total" name="price" class="form-input" value="${basePrice}" readonly style="background-color: #f8fafc; font-weight: bold; font-size: 1.1rem;">
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">Forma de Pago</label>
                     <select name="paymentMethod" class="form-select" required>
-                        <option value="Efectivo">Efectivo</option>
-                        <option value="Tarjeta">Tarjeta</option>
-                        <option value="Transferencia">Transferencia</option>
+                        <option value="Efectivo" ${booking.paymentMethod === 'Efectivo' ? 'selected' : ''}>Efectivo</option>
+                        <option value="Tarjeta" ${booking.paymentMethod === 'Tarjeta' ? 'selected' : ''}>Tarjeta</option>
+                        <option value="Transferencia" ${booking.paymentMethod === 'Transferencia' ? 'selected' : ''}>Transferencia</option>
+                        <option value="A confirmar" disabled style="display:none" ${!['Efectivo','Tarjeta','Transferencia'].includes(booking.paymentMethod) ? 'selected' : ''}>A confirmar</option>
                     </select>
                 </div>
+
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                    <input type="checkbox" name="cardOnFile" id="cardOnFile" style="width: 16px; height: 16px;">
+                    <label for="cardOnFile" class="form-label" style="margin-bottom: 0; cursor: pointer;">Card on file (Solo referencia)</label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Notas de pago</label>
+                    <textarea name="paymentNotes" class="form-input" rows="2" placeholder="Opcional..."></textarea>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
+
                 <div class="form-group">
                     <label class="form-label">Notas Internas</label>
                     <textarea name="notes" class="form-input" rows="3"></textarea>
@@ -2476,11 +2598,234 @@
             </form>
         `;
             this.openModal(content);
+            // Auto add the first row
+            this.addVisitProductRow();
+        },
+
+        // Add a new row to the products table
+        addVisitProductRow() {
+            const list = document.getElementById('visit-products-list');
+            if (!list) return;
+            const uniqueId = Date.now() + Math.floor(Math.random() * 1000);
+
+            const activeProducts = state.inventoryProducts;
+            const productOptions = activeProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+            const tr = document.createElement('tr');
+            tr.id = `visit-product-row-${uniqueId}`;
+            tr.innerHTML = `
+                <td>
+                    <select class="form-select visit-product-select" data-row-id="${uniqueId}" style="padding: 0.25rem;" onchange="turnoApp.onVisitProductChange(${uniqueId})" required>
+                        <option value="">Seleccione...</option>
+                        ${productOptions}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select visit-vial-select" data-row-id="${uniqueId}" style="padding: 0.25rem; display: none;" onchange="turnoApp.onVisitProductQuantityChange(${uniqueId})" required>
+                    </select>
+                    <span class="visit-no-vial-text" data-row-id="${uniqueId}" style="color:#666; font-size:0.8rem; display:none;">N/A (Skincare)</span>
+                </td>
+                <td>
+                    <input type="number" class="form-input visit-units-input" data-row-id="${uniqueId}" style="padding: 0.25rem;" min="1" value="1" step="any" required oninput="turnoApp.onVisitProductQuantityChange(${uniqueId})">
+                    <div class="visit-units-warning" data-row-id="${uniqueId}" style="color:#ef4444; font-size:0.7rem; display:none;">Unidades insuficientes</div>
+                </td>
+                <td>
+                    <input type="number" class="form-input visit-price-input" data-row-id="${uniqueId}" style="padding: 0.25rem;" min="0" value="0" step="1" required oninput="turnoApp.onVisitProductQuantityChange(${uniqueId})">
+                </td>
+                <td>
+                    <input type="number" class="form-input visit-linetotal-input" data-row-id="${uniqueId}" style="padding: 0.25rem; background-color: #f8fafc; font-weight: bold;" value="0" readonly>
+                </td>
+                <td style="text-align: center;">
+                    <button type="button" class="btn-icon" style="color:#ef4444;" onclick="turnoApp.removeVisitProductRow(${uniqueId})">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                    </button>
+                </td>
+            `;
+            list.appendChild(tr);
+            this.updateIcons();
+        },
+
+        removeVisitProductRow(rowId) {
+            const tr = document.getElementById(`visit-product-row-${rowId}`);
+            if (tr) tr.remove();
+            this.calculateVisitTotal();
+        },
+
+        onVisitProductChange(rowId) {
+            const productSelect = document.querySelector(`.visit-product-select[data-row-id="${rowId}"]`);
+            const vialSelect = document.querySelector(`.visit-vial-select[data-row-id="${rowId}"]`);
+            const noVialText = document.querySelector(`.visit-no-vial-text[data-row-id="${rowId}"]`);
+            const priceInput = document.querySelector(`.visit-price-input[data-row-id="${rowId}"]`);
+            const unitsInput = document.querySelector(`.visit-units-input[data-row-id="${rowId}"]`);
+            
+            const productId = parseInt(productSelect.value);
+            const product = state.inventoryProducts.find(p => p.id === productId);
+
+            if (!product) {
+                vialSelect.style.display = 'none';
+                noVialText.style.display = 'none';
+                priceInput.value = 0;
+                this.onVisitProductQuantityChange(rowId);
+                return;
+            }
+
+            // Auto-fill price
+            priceInput.value = product.sale_price !== null ? product.sale_price : (product.price || 0);
+
+            if (product.unit_type === 'vial') {
+                // It is injectable -> show vials
+                noVialText.style.display = 'none';
+                vialSelect.style.display = 'block';
+                // Always make vial required for injectables
+                vialSelect.required = true;
+
+                const vials = state.inventoryVials.filter(v => v.product_id === productId && v.available_quantity > 0 && v.active !== false);
+                if (vials.length > 0) {
+                    vialSelect.innerHTML = `<option value="">Seleccione Vial</option>` + vials.map(v => 
+                        `<option value="${v.id}" data-max="${v.available_quantity}">Cód: ${v.asset_code} — Lote: ${v.lot || '-'} — Vence: ${v.expiration_date || '-'} — ${v.available_quantity} ud disp</option>`
+                    ).join('');
+                } else {
+                    vialSelect.innerHTML = `<option value="">(Sin Viales Activos)</option>`;
+                }
+            } else {
+                // Skincare or other -> hide vials
+                vialSelect.style.display = 'none';
+                vialSelect.innerHTML = '';
+                vialSelect.required = false;
+                noVialText.style.display = 'block';
+            }
+
+            this.onVisitProductQuantityChange(rowId);
+        },
+
+        onVisitProductQuantityChange(rowId) {
+            const unitsInput = document.querySelector(`.visit-units-input[data-row-id="${rowId}"]`);
+            const priceInput = document.querySelector(`.visit-price-input[data-row-id="${rowId}"]`);
+            const lineTotalInput = document.querySelector(`.visit-linetotal-input[data-row-id="${rowId}"]`);
+            const vialSelect = document.querySelector(`.visit-vial-select[data-row-id="${rowId}"]`);
+            const warningEl = document.querySelector(`.visit-units-warning[data-row-id="${rowId}"]`);
+            
+            const units = parseFloat(unitsInput.value) || 0;
+            const price = parseFloat(priceInput.value) || 0;
+            lineTotalInput.value = (units * price).toFixed(2);
+
+            // Validation for vials
+            if (vialSelect.style.display !== 'none' && vialSelect.selectedIndex > 0) {
+                const opt = vialSelect.options[vialSelect.selectedIndex];
+                const max = parseFloat(opt.getAttribute('data-max')) || 0;
+                if (units > max) {
+                    warningEl.innerText = `Insuficiente. Disponibles: ${max}`;
+                    warningEl.style.display = 'block';
+                    unitsInput.setCustomValidity("Unidades insuficientes");
+                } else {
+                    warningEl.style.display = 'none';
+                    unitsInput.setCustomValidity("");
+                }
+            } else {
+                warningEl.style.display = 'none';
+                unitsInput.setCustomValidity("");
+            }
+
+            this.calculateVisitTotal();
+        },
+
+        calculateVisitTotal() {
+            // Include service base price
+            const form = document.getElementById('modal-content').querySelector('form');
+            // Hacky way to retrieve basePrice we injected in the initial value of subtotal, 
+            // but we can just parse the original readonly subtotal... wait, no. We need to store basePrice.
+            // Let's use a hidden attribute or just recompute it here if we attach bookingId somehow.
+            // But we can just query the DOM inputs for all line totals and add them to a single baseServicePrice.
+            
+            let baseServicePrice = parseFloat(document.getElementById('visit-subtotal').getAttribute('data-base-price')) || 0;
+            // Since we didn't add data-base-price earlier, we'll do it by storing the original value of subtotal.
+            if (!document.getElementById('visit-subtotal').hasAttribute('data-base-price')) {
+                 document.getElementById('visit-subtotal').setAttribute('data-base-price', document.getElementById('visit-subtotal').value);
+            }
+            baseServicePrice = parseFloat(document.getElementById('visit-subtotal').getAttribute('data-base-price')) || 0;
+
+            let productsSubtotal = 0;
+            document.querySelectorAll('.visit-linetotal-input').forEach(input => {
+                productsSubtotal += (parseFloat(input.value) || 0);
+            });
+
+            const subtotal = baseServicePrice + productsSubtotal;
+            document.getElementById('visit-subtotal').value = subtotal;
+
+            const discount = parseFloat(document.getElementById('visit-discount').value) || 0;
+            const total = subtotal - discount;
+            document.getElementById('visit-total').value = total > 0 ? total : 0;
         },
 
         saveVisit(e, bookingId) {
             e.preventDefault();
             const formData = new FormData(e.target);
+            
+            // Check if Products Validation passes
+            const list = document.getElementById('visit-products-list');
+            const rows = document.querySelectorAll('.visit-product-select');
+            
+            // At least one product required? The prompt says: "At least one product row required before saving"
+            if (rows.length === 0) {
+                alert("Debes agregar al menos un producto a la historia clínica (Services & Products Section).");
+                return;
+            }
+
+            let consumedProducts = [];
+            let validationFailed = false;
+
+            document.querySelectorAll('.visit-product-select').forEach(sel => {
+                const rowId = sel.getAttribute('data-row-id');
+                const productId = parseInt(sel.value);
+                const vialSelect = document.querySelector(`.visit-vial-select[data-row-id="${rowId}"]`);
+                const unitsInput = document.querySelector(`.visit-units-input[data-row-id="${rowId}"]`);
+                const priceInput = document.querySelector(`.visit-price-input[data-row-id="${rowId}"]`);
+                const lineTotalInput = document.querySelector(`.visit-linetotal-input[data-row-id="${rowId}"]`);
+
+                if (!productId) { validationFailed = true; return; }
+
+                let vialId = null;
+                if (vialSelect.style.display !== 'none') {
+                    vialId = parseInt(vialSelect.value);
+                    if (!vialId) { validationFailed = true; return; }
+                }
+                const units = parseFloat(unitsInput.value);
+                if (!units || units <= 0) { validationFailed = true; return; }
+
+                if (unitsInput.validationMessage) { validationFailed = true; return; }
+
+                // Gather item for audit
+                consumedProducts.push({
+                    productId,
+                    productName: sel.options[sel.selectedIndex].text,
+                    vialId,
+                    vialAssetCode: vialId ? vialSelect.options[vialSelect.selectedIndex].text.split('—')[0].trim().replace('Cód: ', '') : null,
+                    units,
+                    pricePerUnit: parseFloat(priceInput.value),
+                    lineTotal: parseFloat(lineTotalInput.value)
+                });
+            });
+
+            if (validationFailed) {
+                alert("Por favor complete toda la información requerida en la tabla de productos y verifique el stock.");
+                return;
+            }
+
+            // Deduct stock immediately
+            consumedProducts.forEach(consumo => {
+                if (consumo.vialId) {
+                    const vialIndex = state.inventoryVials.findIndex(v => v.id === consumo.vialId);
+                    if (vialIndex > -1) {
+                        state.inventoryVials[vialIndex].available_quantity -= consumo.units;
+                    }
+                } else {
+                    // Skincare or normal products
+                    const productIndex = state.inventoryProducts.findIndex(p => p.id === consumo.productId);
+                    if (productIndex > -1 && state.inventoryProducts[productIndex].stock) {
+                        state.inventoryProducts[productIndex].stock.available_quantity -= consumo.units;
+                    }
+                }
+            });
 
             const visit = {
                 id: Date.now(),
@@ -2490,23 +2835,35 @@
                 treatment: formData.get('treatment'),
                 units: formData.get('units'),
                 price: parseFloat(formData.get('price')),
+                subtotal: parseFloat(formData.get('subtotal')),
+                discount: parseFloat(formData.get('discount')),
                 paymentMethod: formData.get('paymentMethod'),
-                notes: formData.get('notes')
+                cardOnFile: formData.get('cardOnFile') === 'on',
+                paymentNotes: formData.get('paymentNotes'),
+                notes: formData.get('notes'),
+                consumedProducts: consumedProducts // Audit trail
             };
 
             state.visits.push(visit);
             localStorage.setItem('lumina_visits', JSON.stringify(state.visits));
 
+            // Optional DB Stock Deductions would go here if we were executing real SQL inserts/updates.
+            
             // Update booking status
             const booking = state.bookings.find(b => b.id === bookingId);
             if (booking) {
                 booking.status = 'Completado';
+                const newTotal = parseFloat(formData.get('price'));
+                if (booking.price !== newTotal) {
+                    booking.price = newTotal;
+                    console.log("Monto actualizado al completar historia de visita");
+                }
                 localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
             }
 
             this.syncPatients(); // Update patient stats
             this.closeModal();
-            this.showNotification('Visita registrada correctamente');
+            this.showNotification('Visita y consumos registrados correctamente');
             this.renderMyBookings();
         },
 
