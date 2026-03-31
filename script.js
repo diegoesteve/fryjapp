@@ -154,7 +154,17 @@
                 state.professionals = data.map(p => ({
                     ...p,
                     serviceIds: p.service_ids || [],
-                    image: p.image_url
+                    image: p.image_url,
+                    availability: p.availability || {
+                        schedule: {
+                            'Mon': ['09:00-18:00'],
+                            'Tue': ['09:00-18:00'],
+                            'Wed': ['09:00-18:00'],
+                            'Thu': ['09:00-18:00'],
+                            'Fri': ['09:00-18:00']
+                        },
+                        blockouts: []
+                    }
                 }));
             }
         },
@@ -170,21 +180,25 @@
         },
 
         async fetchInventoryVials() {
-            // Mock Vials data until inventory_vials table exists
-            state.inventoryVials = [
-                { id: 1, product_id: 1, asset_code: 'BXT-2024-001', lot: 'L2301A', expiration_date: '2025-12-31', available_quantity: 100 },
-                { id: 2, product_id: 1, asset_code: 'BXT-2024-002', lot: 'L2302A', expiration_date: '2025-12-31', available_quantity: 50 },
-                { id: 3, product_id: 2, asset_code: 'HA-2024-001', lot: 'L2305B', expiration_date: '2025-06-30', available_quantity: 2 }
-            ];
-            
-            // Map product IDs dynamically if db IDs differ from mock IDs for injectables (vial unit_type)
-            const vialProducts = state.inventoryProducts.filter(p => p.unit_type === 'vial');
-            if (vialProducts.length > 0) {
-                state.inventoryVials[0].product_id = vialProducts[0].id;
-                state.inventoryVials[1].product_id = vialProducts[0].id;
-                if (vialProducts.length > 1) {
-                    state.inventoryVials[2].product_id = vialProducts[1].id;
+            const savedVials = localStorage.getItem('lumina_inventory_vials');
+            if (savedVials) {
+                state.inventoryVials = JSON.parse(savedVials);
+            } else {
+                state.inventoryVials = [
+                    { id: 1, product_id: 1, asset_code: 'BXT-2024-001', lot: 'L2301A', expiration_date: '2025-12-31', total_quantity: 100, available_quantity: 100, active: true },
+                    { id: 2, product_id: 1, asset_code: 'BXT-2024-002', lot: 'L2302A', expiration_date: '2025-12-31', total_quantity: 50, available_quantity: 50, active: true },
+                    { id: 3, product_id: 2, asset_code: 'HA-2024-001', lot: 'L2305B', expiration_date: '2025-06-30', total_quantity: 2, available_quantity: 2, active: true }
+                ];
+                
+                const vialProducts = state.inventoryProducts.filter(p => p.type === 'Injectable');
+                if (vialProducts.length > 0) {
+                    state.inventoryVials[0].product_id = vialProducts[0].id;
+                    state.inventoryVials[1].product_id = vialProducts[0].id;
+                    if (vialProducts.length > 1) {
+                        state.inventoryVials[2].product_id = vialProducts[1].id;
+                    }
                 }
+                localStorage.setItem('lumina_inventory_vials', JSON.stringify(state.inventoryVials));
             }
         },
 
@@ -1081,7 +1095,9 @@
             const schedule = prof?.availability?.schedule?.[dayName] || [];
 
             if (schedule.length === 0) {
-                slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional no atiende los días ' + new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }) + 's.</p>';
+                const dayLong = new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' });
+                const pluralDay = dayLong.endsWith('s') ? dayLong : dayLong + 's';
+                slotsContainer.innerHTML = '<p class="text-center" style="grid-column: 1/-1; color: #d9534f; font-weight:500;">El profesional no atiende los días ' + pluralDay + '.</p>';
                 return;
             }
 
@@ -2536,9 +2552,10 @@
                             <tr>
                                 <th style="width: 25%;">Producto</th>
                                 <th style="width: 25%;">Vial / Lote</th>
-                                <th style="width: 15%;">Cantidad</th>
-                                <th style="width: 15%;">Precio Unit.</th>
-                                <th style="width: 15%;">Total Línea</th>
+                                <th style="width: 12%;">Unidades</th>
+                                <th style="width: 13%;">Cantidad (Skincare)</th>
+                                <th style="width: 10%;">Precio Unit.</th>
+                                <th style="width: 10%;">Total Línea</th>
                                 <th style="width: 5%;"></th>
                             </tr>
                         </thead>
@@ -2608,17 +2625,18 @@
             if (!list) return;
             const uniqueId = Date.now() + Math.floor(Math.random() * 1000);
 
-            const activeProducts = state.inventoryProducts;
+            const activeProducts = state.inventoryProducts.filter(p => p.active !== false);
             const productOptions = activeProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 
             const tr = document.createElement('tr');
             tr.id = `visit-product-row-${uniqueId}`;
             tr.innerHTML = `
                 <td>
-                    <select class="form-select visit-product-select" data-row-id="${uniqueId}" style="padding: 0.25rem;" onchange="turnoApp.onVisitProductChange(${uniqueId})" required>
-                        <option value="">Seleccione...</option>
+                    <input list="products-list-${uniqueId}" class="form-input visit-product-input" data-row-id="${uniqueId}" style="padding: 0.25rem;" placeholder="Buscar..." onchange="turnoApp.onVisitProductChange(${uniqueId})" required autocomplete="off">
+                    <datalist id="products-list-${uniqueId}">
                         ${productOptions}
-                    </select>
+                    </datalist>
+                    <input type="hidden" class="visit-product-select" data-row-id="${uniqueId}">
                 </td>
                 <td>
                     <select class="form-select visit-vial-select" data-row-id="${uniqueId}" style="padding: 0.25rem; display: none;" onchange="turnoApp.onVisitProductQuantityChange(${uniqueId})" required>
@@ -2626,14 +2644,17 @@
                     <span class="visit-no-vial-text" data-row-id="${uniqueId}" style="color:#666; font-size:0.8rem; display:none;">N/A (Skincare)</span>
                 </td>
                 <td>
-                    <input type="number" class="form-input visit-units-input" data-row-id="${uniqueId}" style="padding: 0.25rem;" min="1" value="1" step="any" required oninput="turnoApp.onVisitProductQuantityChange(${uniqueId})">
-                    <div class="visit-units-warning" data-row-id="${uniqueId}" style="color:#ef4444; font-size:0.7rem; display:none;">Unidades insuficientes</div>
+                    <input type="number" class="form-input visit-units-input" data-row-id="${uniqueId}" style="padding: 0.25rem;" min="0.01" value="1" step="any" required oninput="turnoApp.onVisitProductQuantityChange(${uniqueId})">
+                    <div class="visit-units-warning" data-row-id="${uniqueId}" style="color:#ef4444; font-size:0.7rem; display:none;">No hay suficientes unidades en este vial. Disponibles:</div>
+                </td>
+                <td>
+                    <input type="text" class="form-input visit-skincare-qty-input" data-row-id="${uniqueId}" style="padding: 0.25rem; display: none;" placeholder="Ej: 2 ml">
                 </td>
                 <td>
                     <input type="number" class="form-input visit-price-input" data-row-id="${uniqueId}" style="padding: 0.25rem;" min="0" value="0" step="1" required oninput="turnoApp.onVisitProductQuantityChange(${uniqueId})">
                 </td>
                 <td>
-                    <input type="number" class="form-input visit-linetotal-input" data-row-id="${uniqueId}" style="padding: 0.25rem; background-color: #f8fafc; font-weight: bold;" value="0" readonly>
+                    <input type="number" class="form-input visit-linetotal-input" data-row-id="${uniqueId}" style="padding: 0.25rem; background-color: #f8fafc; font-weight: bold; width: 60px;" value="0" readonly>
                 </td>
                 <td style="text-align: center;">
                     <button type="button" class="btn-icon" style="color:#ef4444;" onclick="turnoApp.removeVisitProductRow(${uniqueId})">
@@ -2652,47 +2673,66 @@
         },
 
         onVisitProductChange(rowId) {
+            const productInput = document.querySelector(`.visit-product-input[data-row-id="${rowId}"]`);
             const productSelect = document.querySelector(`.visit-product-select[data-row-id="${rowId}"]`);
             const vialSelect = document.querySelector(`.visit-vial-select[data-row-id="${rowId}"]`);
             const noVialText = document.querySelector(`.visit-no-vial-text[data-row-id="${rowId}"]`);
             const priceInput = document.querySelector(`.visit-price-input[data-row-id="${rowId}"]`);
             const unitsInput = document.querySelector(`.visit-units-input[data-row-id="${rowId}"]`);
+            const skincareQtyInput = document.querySelector(`.visit-skincare-qty-input[data-row-id="${rowId}"]`);
             
-            const productId = parseInt(productSelect.value);
-            const product = state.inventoryProducts.find(p => p.id === productId);
+            // Find product by name from datalist input
+            const product = state.inventoryProducts.find(p => p.id == productInput.value || p.name === productInput.value);
 
             if (!product) {
+                productSelect.value = '';
                 vialSelect.style.display = 'none';
                 noVialText.style.display = 'none';
+                skincareQtyInput.style.display = 'none';
                 priceInput.value = 0;
                 this.onVisitProductQuantityChange(rowId);
                 return;
             }
 
+            productSelect.value = product.id; // Store actual ID behind the scenes
+
             // Auto-fill price
             priceInput.value = product.sale_price !== null ? product.sale_price : (product.price || 0);
 
-            if (product.unit_type === 'vial') {
-                // It is injectable -> show vials
+            if (product.type === 'Injectable') {
+                // It is injectable -> show vials, hide skincare qty
                 noVialText.style.display = 'none';
                 vialSelect.style.display = 'block';
-                // Always make vial required for injectables
+                skincareQtyInput.style.display = 'none';
                 vialSelect.required = true;
 
-                const vials = state.inventoryVials.filter(v => v.product_id === productId && v.available_quantity > 0 && v.active !== false);
-                if (vials.length > 0) {
-                    vialSelect.innerHTML = `<option value="">Seleccione Vial</option>` + vials.map(v => 
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                
+                const validVials = state.inventoryVials.filter(v => {
+                    if (v.product_id != product.id) return false;
+                    if (v.available_quantity <= 0) return false;
+                    if (v.active === false) return false;
+                    const expDate = new Date(v.expiration_date);
+                    if (expDate < today) return false; // Vencido
+                    return true;
+                }).sort((a,b) => new Date(a.expiration_date) - new Date(b.expiration_date));
+
+                if (validVials.length > 0) {
+                    vialSelect.innerHTML = validVials.map(v => 
                         `<option value="${v.id}" data-max="${v.available_quantity}">Cód: ${v.asset_code} — Lote: ${v.lot || '-'} — Vence: ${v.expiration_date || '-'} — ${v.available_quantity} ud disp</option>`
                     ).join('');
+                    vialSelect.selectedIndex = 0; // Auto-select oldest valid
                 } else {
-                    vialSelect.innerHTML = `<option value="">(Sin Viales Activos)</option>`;
+                    vialSelect.innerHTML = `<option value="">(Sin Viales Válidos)</option>`;
                 }
             } else {
-                // Skincare or other -> hide vials
+                // Skincare or other -> hide vials, show skincare qty
                 vialSelect.style.display = 'none';
                 vialSelect.innerHTML = '';
                 vialSelect.required = false;
                 noVialText.style.display = 'block';
+                skincareQtyInput.style.display = 'block';
             }
 
             this.onVisitProductQuantityChange(rowId);
@@ -2714,7 +2754,7 @@
                 const opt = vialSelect.options[vialSelect.selectedIndex];
                 const max = parseFloat(opt.getAttribute('data-max')) || 0;
                 if (units > max) {
-                    warningEl.innerText = `Insuficiente. Disponibles: ${max}`;
+                    warningEl.innerText = `No hay suficientes unidades en este vial. Disponibles: ${max}`;
                     warningEl.style.display = 'block';
                     unitsInput.setCustomValidity("Unidades insuficientes");
                 } else {
@@ -2783,6 +2823,8 @@
                 const lineTotalInput = document.querySelector(`.visit-linetotal-input[data-row-id="${rowId}"]`);
 
                 if (!productId) { validationFailed = true; return; }
+                const productInput = document.querySelector(`.visit-product-input[data-row-id="${rowId}"]`);
+                const skincareQtyInput = document.querySelector(`.visit-skincare-qty-input[data-row-id="${rowId}"]`);
 
                 let vialId = null;
                 if (vialSelect.style.display !== 'none') {
@@ -2797,10 +2839,11 @@
                 // Gather item for audit
                 consumedProducts.push({
                     productId,
-                    productName: sel.options[sel.selectedIndex].text,
+                    productName: productInput.value,
                     vialId,
                     vialAssetCode: vialId ? vialSelect.options[vialSelect.selectedIndex].text.split('—')[0].trim().replace('Cód: ', '') : null,
                     units,
+                    skincareQty: skincareQtyInput.style.display !== 'none' ? skincareQtyInput.value : null,
                     pricePerUnit: parseFloat(priceInput.value),
                     lineTotal: parseFloat(lineTotalInput.value)
                 });
@@ -2865,6 +2908,168 @@
             this.closeModal();
             this.showNotification('Visita y consumos registrados correctamente');
             this.renderMyBookings();
+        },
+
+        // ENH-24b: View Visit (Read-Only)
+        viewVisit(bookingId) {
+            const booking = state.bookings.find(b => b.id === bookingId);
+            const visit = state.visits.find(v => v.bookingId === bookingId);
+            if (!booking || !visit) return;
+
+            const patient = state.patients.find(p => p.email === booking.clientEmail) || {};
+            const prof = state.professionals.find(p => p.id === visit.professionalId) || { name: 'Desconocido' };
+            const isAdmin = state.currentUser.role === 'admin';
+
+            let productsHtml = '';
+            if (visit.consumedProducts && visit.consumedProducts.length > 0) {
+                productsHtml = visit.consumedProducts.map(p => `
+                    <tr>
+                        <td>${p.productName}</td>
+                        <td>${p.vialAssetCode || 'N/A'} ${p.skincareQty ? '(Cant: '+p.skincareQty+')' : ''}</td>
+                        <td>${p.units}</td>
+                        <td>$${p.pricePerUnit}</td>
+                        <td><strong>$${p.lineTotal}</strong></td>
+                    </tr>
+                `).join('');
+            } else {
+                productsHtml = `<tr><td colspan="5" class="text-center">No se registraron productos.</td></tr>`;
+            }
+
+            const adminEditBtn = isAdmin ? `<button onclick="turnoApp.editVisitConsumption(${visit.id})" class="btn-primary" style="background-color:#f59e0b; padding:0.4rem 0.8rem; font-size: 0.85rem;"><i data-lucide="edit" style="width: 14px; height: 14px; display: inline-block;"></i> Corregir Consumos</button>` : '';
+
+            const content = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">Historia de Visita</h3>
+                ${adminEditBtn}
+            </div>
+            
+            <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
+                <h4 style="margin-top: 0; margin-bottom: 1rem; color: #334155; font-size: 0.95rem; text-transform: uppercase;">Detalles del Paciente</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.9rem;">
+                    <div><span style="color: #64748b; display: block; font-size: 0.8rem;">Nombre completo</span><strong>${booking.clientName}</strong></div>
+                    <div><span style="color: #64748b; display: block; font-size: 0.8rem;">MRN</span><span style="font-family: monospace; background: #eef2ff; color: #4f46e5; padding: 0.15rem 0.4rem; border-radius: 3px; font-weight: 600;">${patient.mrn || 'N/A'}</span></div>
+                    <div><span style="color: #64748b; display: block; font-size: 0.8rem;">Fecha del turno</span><strong>${booking.date} a las ${booking.time}</strong></div>
+                    <div><span style="color: #64748b; display: block; font-size: 0.8rem;">Profesional a cargo</span><strong>${prof.name}</strong></div>
+                    <div style="grid-column: span 2;"><span style="color: #64748b; display: block; font-size: 0.8rem;">Servicio(s)</span><strong>${booking.serviceName}</strong></div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="color: #64748b;">Tratamiento Realizado</label>
+                <div style="padding: 0.5rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">${visit.treatment || '-'}</div>
+            </div>
+             <div class="form-group">
+                <label class="form-label" style="color: #64748b;">Unidades / Detalles Generales</label>
+                <div style="padding: 0.5rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">${visit.units || '-'}</div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
+            <h4 style="margin: 0; margin-bottom: 1rem;">Productos Utilizados</h4>
+            <div style="overflow-x: auto; margin-bottom: 1rem;">
+                <table class="admin-table" style="font-size: 0.85rem;">
+                    <thead><tr><th>Producto</th><th>Vial / Lote</th><th>Cantidad</th><th>Precio Unit.</th><th>Total Línea</th></tr></thead>
+                    <tbody>${productsHtml}</tbody>
+                </table>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
+            <h4 style="margin-bottom: 1rem;">Precios y Pago</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div><label class="form-label" style="color: #64748b;">Subtotal</label><div style="font-weight: bold;">$${visit.subtotal || parseFloat(visit.amount) || 0}</div></div>
+                <div><label class="form-label" style="color: #64748b;">Descuento</label><div style="font-weight: bold; color: #ef4444;">-$${visit.discount || 0}</div></div>
+                <div><label class="form-label" style="color: #64748b;">Total Cobrado</label><div style="font-weight: bold; font-size: 1.1rem; color: #10b981;">$${visit.price || parseFloat(visit.amount) || 0}</div></div>
+                <div><label class="form-label" style="color: #64748b;">Forma de Pago</label><div>${visit.paymentMethod || '-'} ${visit.cardOnFile ? '<span style="font-size:0.75rem; background:#f1f5f9; padding:0.1rem 0.3rem; border-radius:3px; margin-left:0.5rem;">Card on file</span>' : ''}</div></div>
+            </div>
+            
+            ${visit.paymentNotes ? `
+            <div style="margin-top: 1rem;">
+                <label class="form-label" style="color: #64748b;">Notas de pago</label>
+                <div style="padding: 0.5rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.9rem;">${visit.paymentNotes}</div>
+            </div>` : ''}
+
+            ${visit.notes ? `
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
+            <div class="form-group">
+                <label class="form-label" style="color: #64748b;">Notas Internas</label>
+                <div style="padding: 0.5rem; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 4px; font-size: 0.9rem; color: #92400e;">${visit.notes}</div>
+            </div>` : ''}
+
+            <button onclick="turnoApp.closeModal()" class="btn-primary" style="width: 100%; margin-top: 1.5rem;">Cerrar Historia</button>
+            `;
+            this.openModal(content);
+            this.updateIcons();
+        },
+
+        editVisitConsumption(visitId) {
+            const visit = state.visits.find(v => v.id === visitId);
+            if (!visit) return;
+            const content = `
+                <h3 class="mb-4">Corregir Consumo de Productos</h3>
+                <p style="font-size: 0.9rem; margin-bottom: 1rem; color: #64748b;">Ajuste las unidades utilizadas que se descontaron del stock. Debe ingresar una razón.</p>
+                <form id="admin-correction-form" onsubmit="turnoApp.saveVisitCorrection(event, ${visitId})">
+                    <table class="admin-table" style="font-size: 0.85rem; margin-bottom: 1rem;">
+                        <thead><tr><th>Producto</th><th>Vial/Lote</th><th>Unidades Originales</th><th>Nuevas Unidades</th></tr></thead>
+                        <tbody>
+                            ${(visit.consumedProducts || []).map((p, idx) => `
+                                <tr>
+                                    <td>${p.productName}</td>
+                                    <td>${p.vialAssetCode || 'N/A'}${p.skincareQty ? ' (Cant: ' + p.skincareQty + ')' : ''}</td>
+                                    <td>${p.units}</td>
+                                    <td><input type="number" class="form-input correction-unit-input" data-idx="${idx}" value="${p.units}" min="0" step="any" style="width: 80px; padding: 0.25rem;"></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div class="form-group">
+                        <label class="form-label" style="color: #ef4444; font-weight: bold;">Razón de la corrección *</label>
+                        <textarea id="correction-reason" class="form-input" required placeholder="Ej: Hubo un error de tipeo..." rows="2"></textarea>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="button" class="btn-secondary" onclick="turnoApp.viewVisit(${visit.bookingId})">Cancelar</button>
+                        <button type="submit" class="btn-primary" style="background: #ef4444;">Guardar Corrección</button>
+                    </div>
+                </form>
+            `;
+            this.openModal(content);
+        },
+
+        saveVisitCorrection(e, visitId) {
+            e.preventDefault();
+            const visit = state.visits.find(v => v.id === visitId);
+            if (!visit) return;
+            const reason = document.getElementById('correction-reason').value.trim();
+            if (!reason) return alert('Debe ingresar una razón.');
+
+            const inputs = document.querySelectorAll('.correction-unit-input');
+            inputs.forEach(input => {
+                const idx = parseInt(input.getAttribute('data-idx'));
+                const newUnits = parseFloat(input.value) || 0;
+                const oldUnits = visit.consumedProducts[idx].units;
+                if (newUnits !== oldUnits) {
+                    const diff = newUnits - oldUnits; // if diff > 0, deducted more. If diff < 0, returning stock
+                    const p = visit.consumedProducts[idx];
+
+                    // Adjust stock 
+                    if (p.vialId) {
+                        const vialIndex = state.inventoryVials.findIndex(v => v.id === p.vialId);
+                        if (vialIndex > -1) state.inventoryVials[vialIndex].available_quantity -= diff;
+                    } else {
+                        const productIndex = state.inventoryProducts.findIndex(pr => pr.id === p.productId);
+                        if (productIndex > -1 && state.inventoryProducts[productIndex].stock) {
+                            state.inventoryProducts[productIndex].stock.available_quantity -= diff;
+                        }
+                    }
+
+                    // Update visit record
+                    p.units = newUnits;
+                    p.correctionReason = reason;
+                    p.correctionTimestamp = new Date().toISOString();
+                }
+            });
+
+            localStorage.setItem('lumina_visits', JSON.stringify(state.visits));
+            this.showNotification('Consumo corregido y stock actualizado.');
+            this.viewVisit(visit.bookingId);
         },
 
         // ENH-25: Reports
@@ -3091,151 +3296,7 @@
             return colors[hash % colors.length] || '#64748b';
         },
 
-        getAdminWeekHTML() {
-            const currentDate = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay) : new Date();
-            const dayOfWeek = currentDate.getDay(); // 0 (Sun) - 6 (Sat)
-            const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
-            const startOfWeek = new Date(currentDate.setDate(diff));
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-            const startStr = startOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-            const endStr = endOfWeek.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-
-            const startHour = 6;
-            const endHour = 23;
-            const pixelsPerMinute = 1; // 1 min = 1px
-
-            // Build Header
-            let headerHTML = '<div class="timetable-header-grid"><div class="timetable-time-axis-header"></div>';
-            const days = [];
-            for (let i = 0; i < 7; i++) {
-                const dayDate = new Date(startOfWeek);
-                dayDate.setDate(startOfWeek.getDate() + i);
-                const dateStr = dayDate.toISOString().split('T')[0];
-                const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
-                const dayNum = dayDate.getDate();
-                const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
-                days.push({ dateStr, dayDate, isToday });
-                headerHTML += `<div class="timetable-day-header ${isToday ? 'today' : ''}">
-                    <div style="text-transform: capitalize; font-size: 0.85rem;">${dayName}</div>
-                    <div style="font-size: 1.2rem;">${dayNum}</div>
-                </div>`;
-            }
-            headerHTML += '</div>';
-
-            // Build Time Axis
-            let timeAxisHTML = '<div class="timetable-time-axis">';
-            for (let h = startHour; h <= endHour; h++) {
-                const label = `${h.toString().padStart(2, '0')}:00`;
-                timeAxisHTML += `<div class="time-label-slot"><span>${label}</span></div>`;
-            }
-            timeAxisHTML += '</div>';
-
-            // Build Columns
-            let columnsHTML = '';
-            for (let day of days) {
-                const dayBookings = state.bookings.filter(b =>
-                    b.date === day.dateStr &&
-                    b.status !== 'Cancelado' &&
-                    (!state.adminFilters.professionalId || b.professionalId == state.adminFilters.professionalId)
-                );
-
-                // Overlap resolver algorithm
-                dayBookings.sort((a, b) => a.time.localeCompare(b.time));
-                const groups = [];
-                for (let b of dayBookings) {
-                    const parts = b.time.split(':');
-                    const startMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-                    const endMin = startMin + (b.duration || 30);
-                    b.startMin = startMin;
-                    b.endMin = endMin;
-
-                    let placed = false;
-                    for (let g of groups) {
-                        if (g.some(gb => Math.max(startMin, gb.startMin) < Math.min(endMin, gb.endMin))) {
-                            g.push(b);
-                            placed = true;
-                            break;
-                        }
-                    }
-                    if (!placed) {
-                        groups.push([b]);
-                    }
-                }
-
-                for (let g of groups) {
-                    const count = g.length;
-                    g.forEach((b, index) => {
-                        b.widthPct = 95 / count;
-                        b.leftPct = (100 / count) * index;
-                    });
-                }
-
-                // Render Background Slots
-                let slotsHTML = '';
-                for (let h = startHour; h <= endHour; h++) {
-                    const t1 = `${h.toString().padStart(2, '0')}:00`;
-                    const t2 = `${h.toString().padStart(2, '0')}:30`;
-                    slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t1}')"></div>`;
-                    slotsHTML += `<div class="time-slot" onclick="turnoApp.showAdminBookingModal('${day.dateStr}', '${t2}')"></div>`;
-                }
-
-                // Render Bookings Objects
-                let bookingsHTML = '';
-                for (let b of dayBookings) {
-                    const startOffset = (b.startMin - (startHour * 60)) * pixelsPerMinute;
-                    const bHeight = (b.duration || 30) * pixelsPerMinute - 2;
-
-                    if (startOffset < 0) continue;
-
-                    bookingsHTML += `
-                    <div class="booking-block" 
-                         onclick="event.stopPropagation(); turnoApp.editBooking(${b.id})"
-                         style="top: ${startOffset}px; height: ${bHeight}px; left: ${b.leftPct}%; width: ${b.widthPct}%; background: ${turnoApp.getProfColor(b.professionalId)};">
-                        <div class="booking-title">${b.time} ${b.clientName.split(' ')[0]}</div>
-                        <div class="booking-subtitle">${b.serviceName}</div>
-                    </div>`;
-                }
-
-                // Render Red Line if Today matches
-                let currentTimeHTML = '';
-                if (day.isToday) {
-                    const now = new Date();
-                    const nowMin = now.getHours() * 60 + now.getMinutes();
-                    if (nowMin >= startHour * 60 && nowMin <= (endHour + 1) * 60) {
-                        const topOffset = (nowMin - (startHour * 60)) * pixelsPerMinute;
-                        currentTimeHTML = `<div class="current-time-line" style="top: ${topOffset}px;"><div class="current-time-indicator"></div></div>`;
-                    }
-                }
-
-                columnsHTML += `<div class="timetable-day-column ${day.isToday ? 'today' : ''}">
-                    ${slotsHTML}
-                    ${bookingsHTML}
-                    ${currentTimeHTML}
-                </div>`;
-            }
-
-            let weekGrid = `
-            <div class="timetable-container" id="week-timetable-scroll">
-                ${headerHTML}
-                <div class="timetable-body">
-                    ${timeAxisHTML}
-                    ${columnsHTML}
-                </div>
-            </div>`;
-
-            return `
-                    <div class="calendar-container">
-                        <div class="calendar-header" style="margin-bottom: 1rem;">
-                             <button onclick="turnoApp.changeWeek(-1)" class="btn-icon">←</button>
-                             <h3 style="margin: 0; display: flex; align-items: center;">Semana ${startStr} - ${endStr}</h3>
-                             <button onclick="turnoApp.changeWeek(1)" class="btn-icon">→</button>
-                        </div>
-                        ${weekGrid}
-                    </div>`;
-        },
 
         changeWeek(direction) {
             const current = new Date(state.agendaView.selectedDay || new Date());
@@ -3253,174 +3314,7 @@
             this.renderAdmin();
         },
 
-        getAdminDayHTML() {
-            const dateStr = state.agendaView.selectedDay ? new Date(state.agendaView.selectedDay).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-            const dateObj = new Date(dateStr + 'T12:00:00');
-            const prettyDate = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-            const profFilterId = state.adminFilters.professionalId;
-
-            const dayBookings = state.bookings
-                .filter(b => b.date === dateStr && b.status !== 'Cancelado' && (!profFilterId || b.professionalId == profFilterId))
-                .sort((a, b) => a.time.localeCompare(b.time));
-
-            let dayGrid = '';
-
-            // 1. General View (List Mode) if no professional selected
-            // Or Timeline View? Let's do Timeline if Professional Selected, List if All
-
-            if (!profFilterId) {
-                // List View (All Professionals)
-                dayGrid += `<div class="day-view-container" style="display: flex; flex-direction: column; gap: 0.75rem;">`;
-                if (dayBookings.length === 0) {
-                    dayGrid += `<div style="padding: 3rem; text-align: center; color: #94a3b8; background: #f8fafc; border-radius: 8px;">No hay turnos para este día.</div>`;
-                } else {
-                    dayGrid += dayBookings.map(b => `
-                                <div style="display: flex; gap: 1rem; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; align-items: center; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                                    <div style="font-weight: 700; font-size: 1.1rem; width: 60px; color: var(--primary); text-align:center;">${b.time}</div>
-                                    <div style="width: 4px; height: 40px; background: ${this.getServiceColor(b.serviceId)}; border-radius: 2px;"></div>
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; color: #1e293b;">${b.clientName}</div>
-                                        <div style="font-size: 0.9rem; color: #64748b;">${b.serviceName} con <strong>${b.professionalName}</strong></div>
-                                    </div>
-                                    <div>
-                                         <span class="status-badge ${b.status.toLowerCase()}">${b.status}</span>
-                                    </div>
-                                    <div>
-                                         <button onclick="turnoApp.editBooking(${b.id})" class="btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;">Ver</button>
-                                    </div>
-                                </div>
-                             `).join('');
-                }
-                dayGrid += `</div>`;
-            } else {
-                // Timeline View (Specific Professional)
-                dayGrid += `<div class="timeline-container" style="display: grid; gap: 1px; background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">`;
-
-                // Determine Availability
-                const prof = state.professionals.find(p => p.id == profFilterId);
-                let startHour = 9;
-                let endHour = 19;
-                let isCountDay = true; // Assume working day unless blocked
-
-                if (prof && prof.availability) {
-                    // Check Blockouts
-                    if (this.isDateFullyBlocked(prof.availability.blockouts, dateStr)) {
-                        dayGrid += `<div style="padding: 2rem; text-align: center; background: #fff1f2; color: #be123c;">
-                            Profesional no disponible en esta fecha (Día Bloqueado/Vacaciones).
-                        </div>`;
-                        isCountDay = false;
-                    } else {
-                        // Check Schedule for this day of week
-                        const dayName = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' }); // Mon, Tue...
-                        const schedule = prof.availability.schedule[dayName];
-
-                        if (!schedule || schedule.length === 0) {
-                            dayGrid += `<div style="padding: 2rem; text-align: center; background: #fff1f2; color: #be123c;">
-                                Profesional no atiende los ${prettyDate.split(' ')[0]}s.
-                            </div>`;
-                            isCountDay = false;
-                        } else {
-                            // Parse start/end from schedule (simplified: take min start and max end of ranges)
-                            // Example format: "09:00-13:00"
-                            const times = schedule.map(s => s.split('-')).flat();
-                            // If complex ranges, we might just iterate standard main block or all.
-                            // For this UI loop, let's find min/max to render the grid
-                            const hours = times.map(t => parseInt(t.split(':')[0]));
-                            startHour = Math.min(...hours);
-                            endHour = Math.max(...hours) - 1; // Loop goes <= endHour? No, loop renders slot starting at h. So if ends 17:00, last slot is 16:00.
-                            // If schedule is 09:00-17:00. endHour should be 16 to render 16:00 slot?
-                            // Logic below uses h <= endHour.
-                            // If range is 09:00-17:00. We want slots 9,10,11,12,13,14,15,16.
-                            // So max hour is 17. We want loop to run until 16.
-
-                            // Let's just fix render to 8-20 range but mark unavailable? 
-                            // Or dynamic:
-                            endHour = Math.max(...hours);
-                            // If exact match logic is needed inside loop:
-                        }
-                    }
-                }
-
-                if (isCountDay) {
-                    for (let h = startHour; h < endHour; h++) {
-                        const timeSlot = `${h.toString().padStart(2, '0')}:00`;
-                        const booking = dayBookings.find(b => b.time.startsWith(timeSlot.split(':')[0])); // Simple match hour
-
-                        // Check specific range availability (e.g. lunch break)
-                        let isWorkingHour = true;
-                        if (prof && prof.availability) {
-                            const dayName = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' });
-                            const schedule = prof.availability.schedule[dayName];
-                            if (schedule) {
-                                // Check if current h is inside any range
-                                // Range "09:00-13:00". 09, 10, 11, 12 are valid. 13 is not (end time).
-                                isWorkingHour = schedule.some(range => {
-                                    const [start, end] = range.split('-');
-                                    const sH = parseInt(start.split(':')[0]);
-                                    const eH = parseInt(end.split(':')[0]);
-                                    return h >= sH && h < eH;
-                                });
-                            }
-
-                            // Apply time-specific blockouts (slots are 60m blocks in this view)
-                            if (isWorkingHour && this.isTimeBlocked(prof.availability.blockouts, dateStr, h * 60, 60)) {
-                                isWorkingHour = false;
-                            }
-                        }
-
-                        if (booking) {
-                            dayGrid += `
-                                <div onclick="turnoApp.editBooking(${booking.id})" style="background: white; padding: 1rem; display: flex; gap: 1rem; align-items: center; border-left: 4px solid ${this.getServiceColor(booking.serviceId)}; cursor: pointer;">
-                                    <div style="width: 60px; font-weight: 600; color: #64748b;">${timeSlot}</div>
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600;">${booking.clientName}</div>
-                                        <div style="font-size: 0.85rem; color: #64748b;">${booking.serviceName}</div>
-                                    </div>
-                                    <span class="status-badge ${booking.status.toLowerCase()}">${booking.status}</span>
-                                </div>
-                            `;
-                        } else if (!isWorkingHour) {
-                            dayGrid += `
-                                <div style="background: #f8fafc; padding: 1rem; display: flex; gap: 1rem; align-items: center; opacity: 0.7;">
-                                    <div style="width: 60px; font-weight: 600; color: #cbd5e1;">${timeSlot}</div>
-                                    <div style="font-style: italic; color: #cbd5e1;">No disponible / Descanso</div>
-                                </div>
-                            `;
-                        } else {
-                            // Free Slot
-                            dayGrid += `
-                                <div onclick="turnoApp.showAdminBookingModal('${dateStr}', '${timeSlot}', '${profFilterId}')" style="background: white; padding: 1rem; display: flex; gap: 1rem; align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f0fdf4'; this.querySelector('.add-text').style.opacity='1';" onmouseout="this.style.background='white'; this.querySelector('.add-text').style.opacity='0';">
-                                    <div style="width: 60px; font-weight: 600; color: #64748b;">${timeSlot}</div>
-                                    <div style="color: #10b981; font-size: 0.9rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; flex: 1;">
-                                        <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
-                                        Disponible
-                                        <span class="add-text" style="margin-left: auto; color: #10b981; opacity: 0; font-weight: 600; transition: opacity 0.2s;">+ Agendar</span>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                    }
-                }
-                dayGrid += `</div>`;
-            }
-
-            return `
-                    <div class="calendar-container">
-                        <div class="calendar-header">
-                             <button onclick="turnoApp.changeDay(-1)" class="btn-icon">←</button>
-                             <h3 style="text-transform: capitalize;">${prettyDate}</h3>
-                             <button onclick="turnoApp.changeDay(1)" class="btn-icon">→</button>
-                        </div>
-                        
-                        ${!profFilterId ?
-                    `<div style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; color: #0369a1; font-size: 0.9rem;">
-                            💡 Selecciona un profesional en los filtros de arriba para ver la disponibilidad horaria detallada (Timeline).
-                         </div>` : ''}
-
-                        ${dayGrid}
-                    </div>`;
-        },
 
         changeDay(direction) {
             const current = new Date(state.agendaView.selectedDay || new Date());
@@ -3560,15 +3454,17 @@
         updateBookingStatus(id, newStatus) {
             const booking = state.bookings.find(b => b.id === id);
             if (booking) {
+                if (newStatus === 'Completado') {
+                    const hasVisit = state.visits && state.visits.some(v => v.bookingId === id);
+                    if (!hasVisit) {
+                        alert('Debés completar la historia de visita antes de cerrar este turno');
+                        return;
+                    }
+                }
+                
                 booking.status = newStatus;
                 // Update LocalStorage
                 localStorage.setItem('lumina_bookings', JSON.stringify(state.bookings));
-
-                // If Completed, add to Visits logic? (Simplified: Handled in reports by filtering 'Completado')
-                if (newStatus === 'Completado') {
-                    // Check if visit already exists
-                    // For now, Report filtering handles it.
-                }
 
                 this.showNotification(`Turno ${newStatus.toLowerCase()} correctamente`);
                 this.renderDashboard(); // Refresh dashboard
@@ -4368,14 +4264,18 @@
 
                 // Button Logic
                 let actions = '';
+                const hasVisit = state.visits && state.visits.some(v => v.bookingId === b.id);
+                
                 if (isProfessional) {
-                    if (status === 'confirmed' || status === 'Confirmado') {
+                    if (hasVisit || status === 'completed' || status === 'Completado') {
                         actions = `
-                                <button onclick="turnoApp.registerVisit(${b.id})" class="btn-primary" style="font-size: 0.85rem; padding: 0.5rem;">✅ Completar</button>
+                            <button onclick="turnoApp.viewVisit(${b.id})" class="btn-primary" style="font-size: 0.85rem; padding: 0.5rem; background: var(--secondary); color: white;">👁 Ver Historia</button>
+                        `;
+                    } else if (status === 'confirmed' || status === 'Confirmado' || status === 'en curso' || status === 'En curso') {
+                        actions = `
+                                <button onclick="turnoApp.registerVisit(${b.id})" class="btn-primary" style="font-size: 0.85rem; padding: 0.5rem; background: var(--primary);">📝 Completar</button>
                                 <button onclick="turnoApp.rescheduleBooking(${b.id})" class="btn-secondary" style="font-size: 0.85rem; padding: 0.5rem;">📅 Reagendar</button>
                             `;
-                    } else if (status === 'completed' || status === 'Completado') {
-                        actions = `<span class="text-center" style="color: var(--primary); font-size: 0.9rem;">✨ Visita Registrada</span>`;
                     }
                 } else {
                     // Patient View Actions
@@ -4683,23 +4583,49 @@
                 </div>
                 <div class="modal-tab-content">
                     <form onsubmit="turnoApp.saveProduct(event, ${product ? `'${product.id}'` : null})">
-                        <div class="form-group">
-                            <label class="form-label">Nombre Comercial</label>
-                            <input type="text" name="name" class="form-input" required value="${product ? product.name : ''}">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Descripción</label>
-                            <input type="text" name="description" class="form-input" value="${product ? (product.description || '') : ''}">
-                        </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom: 1rem;">
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label class="form-label">Nombre Comercial</label>
+                                <input type="text" name="name" class="form-input" required value="${product ? product.name : ''}">
+                            </div>
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label class="form-label">Descripción</label>
+                                <input type="text" name="description" class="form-input" value="${product ? (product.description || '') : ''}">
+                            </div>
                             <div class="form-group">
-                                <label class="form-label">Tipo de Unidad</label>
-                                <select name="unit_type" class="form-select" required>
-                                    <option value="unit" ${product && product.unit_type === 'unit' ? 'selected' : ''}>Unidad(es)</option>
-                                    <option value="vial" ${product && product.unit_type === 'vial' ? 'selected' : ''}>Ampolla / Vial</option>
+                                <label class="form-label">Tipo de Producto</label>
+                                <select name="type" class="form-select" required onchange="document.getElementById('product-unit-select').value = this.value === 'Injectable' ? 'unidades' : 'ml';">
+                                    <option value="Injectable" ${product && product.type === 'Injectable' ? 'selected' : ''}>Injectable</option>
+                                    <option value="Skincare/Tópico" ${(!product || product.type === 'Skincare/Tópico') ? 'selected' : ''}>Skincare/Tópico</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Unidad de medida</label>
+                                <select name="unit_type" class="form-select" required id="product-unit-select">
+                                    <option value="unidades" ${product && product.unit_type === 'unidades' ? 'selected' : ''}>Unidad(es)</option>
                                     <option value="ml" ${product && product.unit_type === 'ml' ? 'selected' : ''}>Mililitros (ml)</option>
                                     <option value="box" ${product && product.unit_type === 'box' ? 'selected' : ''}>Caja(s)</option>
                                 </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Precio de costo</label>
+                                <input type="number" name="cost_price" class="form-input" required value="${product ? (product.cost_price || 0) : 0}" step="any" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Precio de venta</label>
+                                <input type="number" name="sale_price" class="form-input" required value="${product ? (product.sale_price || 0) : 0}" step="any" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Proveedor</label>
+                                <input type="text" name="supplier" class="form-input" value="${product ? (product.supplier || '') : ''}" placeholder="Ej: Laboratorio X">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Stock mínimo (Alertas)</label>
+                                <input type="number" name="min_stock" class="form-input" required value="${product ? (product.min_stock || 0) : 0}" min="0">
+                            </div>
+                            <div class="form-group" style="grid-column: span 2; display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
+                                <input type="checkbox" name="active" id="product-active" ${!product || product.active !== false ? 'checked' : ''} style="width: 18px; height: 18px;">
+                                <label for="product-active" class="form-label" style="margin: 0; cursor: pointer;">Producto Activo (Visible en historias)</label>
                             </div>
                         </div>
                         
@@ -4707,9 +4633,128 @@
                             <button type="submit" class="btn-primary">Guardar Catálogo</button>
                         </div>
                     </form>
+                    ${product && product.type === 'Injectable' ? `
+                    <hr style="border: 0; border-top: 1px solid #eee; margin: 2rem 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 style="margin: 0; color:var(--primary);">Gestión de Viales (ELEVA-INV-02)</h4>
+                        <button type="button" class="btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.85rem;" onclick="turnoApp.showAddVialModal('${product.id}')">
+                            <i data-lucide="plus" style="width: 14px; height: 14px; display: inline-block;"></i> Agregar vial
+                        </button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="admin-table" style="font-size: 0.85rem;">
+                            <thead>
+                                <tr>
+                                    <th>Cód. Asset</th>
+                                    <th>Lote</th>
+                                    <th>Fecha Venc.</th>
+                                    <th>Un. Totales</th>
+                                    <th>Disponibles</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${(state.inventoryVials || []).filter(v => v.product_id == product.id).map(v => {
+                                    const today = new Date();
+                                    today.setHours(0,0,0,0);
+                                    const expDate = new Date(v.expiration_date);
+                                    const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+                                    const expiringSoon = expDate >= today && diffDays <= 30;
+                                    
+                                    let status = 'Activo';
+                                    let badgeClass = 'completed'; // Green
+                                    
+                                    if (v.available_quantity <= 0) {
+                                        status = 'Agotado';
+                                        badgeClass = 'cancelled'; // Gray/Red
+                                    } else if (expDate < today) {
+                                        status = 'Vencido';
+                                        badgeClass = 'cancelled';
+                                    }
+                                    
+                                    return `
+                                    <tr>
+                                        <td><strong>${v.asset_code}</strong></td>
+                                        <td>${v.lot}</td>
+                                        <td>
+                                            ${v.expiration_date}
+                                            ${expiringSoon && status === 'Activo' ? '<span title="Próximo a vencer en 30 días o menos" style="color:#f59e0b; margin-left:0.25rem;">⚠️</span>' : ''}
+                                        </td>
+                                        <td>${v.total_quantity || v.available_quantity}</td>
+                                        <td><strong style="${v.available_quantity <= 0 ? 'color:#ef4444;' : ''}">${v.available_quantity}</strong></td>
+                                        <td><span class="status-badge ${badgeClass}">${status}</span></td>
+                                    </tr>
+                                    `;
+                                }).join('') || '<tr><td colspan="6" class="text-center">No hay viales registrados.</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                    ` : ''}
                 </div>
             `;
             this.openModal(content);
+            this.updateIcons();
+        },
+
+        showAddVialModal(productId) {
+            const product = state.inventoryProducts.find(p => p.id == productId);
+            if (!product) return;
+            const content = `
+                <div class="modal-header">
+                    <h3>Nuevo Vial: ${product.name}</h3>
+                    <button onclick="turnoApp.showProductModal('${productId}')" class="btn-icon">✖</button>
+                </div>
+                <div style="padding:1rem;">
+                    <form onsubmit="turnoApp.saveVial(event, '${productId}')">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Código de Asset (6 char) *</label>
+                                <input type="text" name="asset_code" class="form-input" required pattern="[A-Za-z0-9]{6}" title="Debe ser 6 caracteres alfanuméricos exactos" style="text-transform: uppercase;" placeholder="Ej: A4BC36" maxlength="6">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Número de Lote *</label>
+                                <input type="text" name="lot" class="form-input" required placeholder="Ej: L2301A">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Fecha de Venc. *</label>
+                                <input type="date" name="expiration_date" class="form-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Unidades Totales *</label>
+                                <input type="number" name="total_quantity" class="form-input" required min="1" step="any">
+                            </div>
+                        </div>
+                        <div style="margin-top:1.5rem; text-align:right;">
+                            <button type="button" class="btn-secondary" onclick="turnoApp.showProductModal('${productId}')">Cancelar</button>
+                            <button type="submit" class="btn-primary" style="margin-left:0.5rem;">Cargar Vial</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            this.openModal(content);
+        },
+
+        saveVial(event, productId) {
+            event.preventDefault();
+            const form = event.target;
+            const newVial = {
+                id: Date.now(),
+                product_id: parseInt(productId) || productId,
+                asset_code: form.asset_code.value.toUpperCase(),
+                lot: form.lot.value,
+                expiration_date: form.expiration_date.value,
+                total_quantity: parseFloat(form.total_quantity.value),
+                available_quantity: parseFloat(form.total_quantity.value),
+                active: true,
+                created_at: new Date().toISOString()
+            };
+
+            if (!state.inventoryVials) state.inventoryVials = [];
+            state.inventoryVials.push(newVial);
+            localStorage.setItem('lumina_inventory_vials', JSON.stringify(state.inventoryVials));
+            
+            this.showNotification('Vial registrado correctamente');
+            this.showProductModal(productId);
         },
 
         async saveProduct(event, productId) {
@@ -4718,7 +4763,13 @@
             const payload = {
                 name: form.name.value,
                 description: form.description.value,
-                unit_type: form.unit_type.value
+                type: form.type.value,
+                unit_type: form.unit_type.value,
+                cost_price: parseFloat(form.cost_price.value) || 0,
+                sale_price: parseFloat(form.sale_price.value) || 0,
+                supplier: form.supplier.value,
+                min_stock: parseInt(form.min_stock.value) || 0,
+                active: form.active.checked
             };
 
             this.showNotification('Procesando...');
@@ -4737,6 +4788,12 @@
 
         showAdjustStockModal(productId) {
             const product = state.inventoryProducts.find(p => p.id === productId);
+
+            // Bloquear productos inyectables (Viales)
+            if (product.type === 'Injectable') {
+                return alert("Los ajustes de stock para productos inyectables deben realizarse a través del sistema de viales (Módulo ELEVA-INV-02).");
+            }
+
             const content = `
                 <div class="modal-header">
                     <h3>Operación Manual de Stock</h3>
@@ -4749,16 +4806,22 @@
                     <form onsubmit="turnoApp.saveStockAdjustment(event, '${productId}')">
                         <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1rem;">
                             <div class="form-group">
-                                <label class="form-label">Unidades (Ej: 10, -3)</label>
-                                <input type="number" name="adj_quantity" class="form-input" required placeholder="Ej: 5 o -2">
+                                <label class="form-label">Unidades a sumar/restar</label>
+                                <input type="number" name="adj_quantity" class="form-input" required placeholder="Ej: 5 o -2" step="any">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Causa (Audit Log)</label>
-                                <input type="text" name="reason" class="form-input" required placeholder="Ej: Vencimiento, Proveedor, Merma...">
+                                <select name="reason" class="form-select" required>
+                                    <option value="">Seleccione motivo...</option>
+                                    <option value="Ingreso de stock">Ingreso de stock</option>
+                                    <option value="Ajuste manual">Ajuste manual</option>
+                                    <option value="Merma">Merma</option>
+                                    <option value="Vencimiento">Vencimiento</option>
+                                </select>
                             </div>
                         </div>
                         <div style="margin-top:1.5rem; text-align:right;">
-                            <button type="submit" class="btn-primary" style="background:#0f172a; border-color:#0f172a;">Ejecutar Bloqueo y Guardar</button>
+                            <button type="submit" class="btn-primary" style="background:#0f172a; border-color:#0f172a;">Ejecutar Ajuste y Guardar</button>
                         </div>
                     </form>
                 </div>
@@ -4768,30 +4831,59 @@
 
         async saveStockAdjustment(event, productId) {
             event.preventDefault();
-            const qty = parseInt(event.target.adj_quantity.value);
+            const qty = parseFloat(event.target.adj_quantity.value);
             const reason = event.target.reason.value;
 
             if (qty === 0) return this.closeModal();
 
             this.showNotification('Iniciando transacción segura...');
 
-            // 1. Invocar RPC para asegurar ACID y concurrencia for update
-            const { error: rpcError } = await supabase.rpc('rpc_inventory_adjust_stock', {
-                p_product_id: productId,
-                p_quantity: qty,
-                p_reason: reason,
-                p_user_id: state.currentUser.id
-            });
-
-            if (!rpcError) {
-                await this.fetchInventoryProducts();
-                this.renderInventoryManagement();
-                this.closeModal();
-                this.showNotification('Transacción exitosa. Stock comprometido.');
-            } else {
-                console.error(rpcError);
-                alert('La transacción fue abortada: Ocurrió un conflicto de bloqueo negativo o el stock no daría abasto.');
+            const product = state.inventoryProducts.find(p => p.id === productId);
+            if (!product || !product.stock) {
+                return alert("No se pudo localizar el registro de stock del producto.");
             }
+
+            const newAvailable = product.stock.available_quantity + qty;
+            const newTotal = product.stock.total_quantity + qty;
+
+            if (newAvailable < 0) {
+                return alert("El ajuste resultante genera un stock negativo. Operación cancelada.");
+            }
+
+            // 1. Bypass problemático RPC, hacer un update estándar
+            const { error: updateError } = await window.supabase
+                .from('inventory_stock')
+                .update({ 
+                    available_quantity: newAvailable,
+                    total_quantity: newTotal 
+                })
+                .eq('product_id', productId);
+
+            if (updateError) {
+                console.error(updateError);
+                return alert('La transacción falló al comunicarse con el servidor.');
+            }
+
+            // 2. Generar el Audit Trail en localStorage
+            const auditLog = {
+                date: new Date().toISOString(),
+                user: state.currentUser.name || 'Admin',
+                reason: reason,
+                quantityChanged: qty,
+                resultingStock: newAvailable,
+                productId: productId,
+                productName: product.name
+            };
+
+            let inventoryLogs = JSON.parse(localStorage.getItem('lumina_inventory_audit') || '[]');
+            inventoryLogs.push(auditLog);
+            localStorage.setItem('lumina_inventory_audit', JSON.stringify(inventoryLogs));
+            console.log("Stock Audit Trail Updated:", auditLog);
+
+            await this.fetchInventoryProducts();
+            this.renderInventoryManagement();
+            this.closeModal();
+            this.showNotification('Transacción exitosa. Stock ajustado y log emitido.');
         },
 
         showInventoryRequestModal() {
@@ -4931,6 +5023,19 @@
                     ⚠️ Este turno ya fue ${booking.status.toLowerCase()} y no puede modificarse.
                 </div>
             ` : ''}
+
+            <div style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; background: #f8fafc; padding: 1rem; border-radius: 6px; border: 1px solid #e2e8f0;">
+                <div>
+                    <strong style="display: block; font-size: 0.95rem; color: #334155;">Historia de Visita (Treatment Chart)</strong>
+                    <span style="font-size: 0.85rem; color: #64748b;">Registro clínico del tratamiento para este paciente.</span>
+                </div>
+                <div>
+                    ${(state.visits && state.visits.some(v => v.bookingId === id)) ? 
+                        `<button type="button" onclick="turnoApp.viewVisit(${id}); return false;" class="btn-primary" style="font-size: 0.85rem; padding: 0.4rem 0.8rem; background: var(--secondary); color: white;">👁 Ver Historia</button>` 
+                        : `<span style="font-size: 0.85rem; font-weight: 500; color: #94a3b8; background: #f1f5f9; padding: 0.3rem 0.6rem; border-radius: 4px;">Historia pendiente</span>`}
+                </div>
+            </div>
+
             <form id="edit-booking-form" onsubmit="turnoApp.updateBooking(event, ${id})">
                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                     <div class="form-group">
@@ -5016,9 +5121,18 @@
             const booking = state.bookings.find(b => b.id === id);
 
             if (booking) {
+                const newStatus = formData.get('status');
+                if (newStatus === 'Completado' && booking.status !== 'Completado') {
+                    const hasVisit = state.visits && state.visits.some(v => v.bookingId === id);
+                    if (!hasVisit) {
+                        alert('Debés completar la historia de visita antes de cerrar este turno');
+                        return;
+                    }
+                }
+
                 booking.date = formData.get('date');
                 booking.time = formData.get('time');
-                booking.status = formData.get('status');
+                booking.status = newStatus;
                 booking.notes = formData.get('notes');
                 booking.paymentMethod = formData.get('paymentMethod');
                 booking.price = parseFloat(formData.get('price')) || 0;
